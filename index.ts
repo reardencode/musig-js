@@ -216,16 +216,16 @@ class MusigKeyAggCache {
     // If > 1 unique X-values in the key, keys with Xs identical to 2nd unique X use coffecient = 1
     readonly secondPublicKeyX: bigint,
     readonly publicKey: Point = Point.ZERO, // Current aggregate public key
-    readonly parityFactor: boolean = true,
+    readonly parity: boolean = true,
     readonly tweak: bigint = _0n,
     private readonly _coefCache = new Map<bigint, bigint>()
   ) {}
-  private copyWith(publicKey: Point, parityFactor: boolean, tweak?: bigint) {
+  private copyWith(publicKey: Point, parity: boolean, tweak?: bigint) {
     const cache = new MusigKeyAggCache(
       this.publicKeyHash,
       this.secondPublicKeyX,
       publicKey,
-      parityFactor,
+      parity,
       tweak,
       this._coefCache
     );
@@ -282,26 +282,26 @@ class MusigKeyAggCache {
 
   addTweak(tweak: bigint, xOnly = false) {
     let publicKey: Point | undefined = this.publicKey;
-    let parityFactor = this.parityFactor;
-
     if (xOnly && !hasEvenY(this.publicKey)) {
-      publicKey = publicKey.negate();
+      publicKey = this.publicKey.negate();
     }
     publicKey = Point.BASE.multiplyAndAddUnsafe(publicKey, tweak, _1n);
     if (!publicKey) throw new Error('Tweak failed');
 
+    let parity = this.parity;
     if (xOnly || hasEvenY(this.publicKey)) {
       tweak = mod(this.tweak + tweak, CURVE.n);
     } else {
+      parity = !parity;
       tweak = mod(CURVE.n - this.tweak + tweak, CURVE.n);
-      parityFactor = !parityFactor;
     }
 
     if (!hasEvenY(publicKey)) {
-      parityFactor = !parityFactor;
+      parity = !parity;
       tweak = CURVE.n - tweak;
     }
-    return this.copyWith(publicKey, parityFactor, tweak);
+
+    return this.copyWith(publicKey, parity, tweak);
   }
 
   toHex(): string {
@@ -309,7 +309,7 @@ class MusigKeyAggCache {
       this.publicKey.toHex(true) +
       bytesToHex(this.publicKeyHash) +
       numTo32bStr(this.secondPublicKeyX) +
-      (this.parityFactor ? '01' : '00') +
+      (this.parity ? '01' : '00') +
       numTo32bStr(this.tweak)
     );
   }
@@ -486,7 +486,7 @@ function* musigPartialVerifyInner(
   const mu = yield* cache.coefficient(publicKey);
   let e = processedNonce.challenge;
   // This condition is inverted from secp256k1-zkp's version to facilitate .equals comparison
-  if (!cache.parityFactor) {
+  if (!cache.parity) {
     e = CURVE.n - e; // Negate any of e, mu, publicKey.
   }
 
@@ -515,7 +515,7 @@ function* musigPartialSign(
     Point.fromPrivateKey(privateNonces[1]),
   ];
 
-  if (hasEvenY(publicKey) === cache.parityFactor) {
+  if (hasEvenY(publicKey) === cache.parity) {
     privateKey = CURVE.n - privateKey;
   }
   privateKey = mod(privateKey * mu, CURVE.n);
