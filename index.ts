@@ -159,7 +159,7 @@ type MusigPublicNonce = Hex | [PubKey, PubKey];
 
 interface MusigNonce {
   privateNonce: MusigPrivateNonce;
-  publicNonce: MusigPublicNonce;
+  publicNonce?: MusigPublicNonce;
 }
 
 export type MusigPublicKey = {
@@ -167,19 +167,6 @@ export type MusigPublicKey = {
   publicKey: Uint8Array;
   keyAggCache: string;
 };
-
-function normalize32b(p: PrivKey | PubKey): Uint8Array {
-  if (p instanceof Point) p = p.x;
-  if (typeof p === 'number') {
-    if (Number.isSafeInteger(p)) throw new Error(`Expected integer, got ${p}`);
-    p = BigInt(p);
-  }
-  if (typeof p === 'bigint') {
-    return numTo32b(p);
-  }
-  const b = ensureBytes(p);
-  return b.subarray(b.length - 32);
-}
 
 function normalize33b(p: PubKey): Uint8Array {
   if (p instanceof Point) return p.toRawBytes(true);
@@ -196,7 +183,7 @@ function normalizeMusigPrivateNonce(privateNonce: MusigPrivateNonce): [bigint, b
     const privateNonceB = ensureBytes(privateNonce);
     privateNonce = [privateNonceB.subarray(0, 32), privateNonceB.subarray(32)];
   }
-  return [normalizePrivateKey(privateNonce[0]), normalizePrivateKey(privateNonce[0])];
+  return [normalizePrivateKey(privateNonce[0]), normalizePrivateKey(privateNonce[1])];
 }
 
 function normalizeMusigPublicNonce(publicNonce: MusigPublicNonce): [Point, Point] {
@@ -204,7 +191,7 @@ function normalizeMusigPublicNonce(publicNonce: MusigPublicNonce): [Point, Point
     const publicNonceB = ensureBytes(publicNonce);
     publicNonce = [publicNonceB.subarray(0, 33), publicNonceB.subarray(33)];
   }
-  return [normalizePublicKey(publicNonce[0]), normalizePublicKey(publicNonce[0])];
+  return [normalizePublicKey(publicNonce[0]), normalizePublicKey(publicNonce[1])];
 }
 
 function musigPublicNonceToBytes(publicNonce: MusigPublicNonce): Uint8Array {
@@ -246,10 +233,13 @@ class MusigKeyAggCache {
     return cache;
   }
 
-  static *fromPublicKeys(pubKeys: PubKey[]): U8AGenerator<MusigKeyAggCache> {
+  static *fromPublicKeys(pubKeys: PubKey[], sort = true): U8AGenerator<MusigKeyAggCache> {
+    if (pubKeys.length === 0) throw new Error('Cannot aggregate 0 public keys');
     const publicKeys = pubKeys.map((publicKey) => normalizeEvenPublicKey(publicKey));
-    publicKeys.sort((a, b) => (a.x > b.x ? 1 : -1)); // Equivalent to lexicographically sorting the hex
-    const secondPublicKey = publicKeys.find((pk) => !publicKeys[0].equals(pk)) || Point.ZERO;
+    if (sort) publicKeys.sort((a, b) => (a.x > b.x ? 1 : -1)); // Equivalent to lexicographically sorting the hex
+    const secondPublicKeyIndex = publicKeys.findIndex((pk) => !publicKeys[0].equals(pk));
+    const secondPublicKey =
+      secondPublicKeyIndex >= 0 ? publicKeys[secondPublicKeyIndex] : Point.ZERO;
 
     const publicKeyHash = yield* taggedHash(
       TAGS.keyagg_list,
@@ -258,9 +248,12 @@ class MusigKeyAggCache {
 
     const cache = new MusigKeyAggCache(publicKeyHash, secondPublicKey.x);
 
-    let publicKey = Point.ZERO;
-    for (const pk of publicKeys) {
-      publicKey = publicKey.add(pk.multiply(yield* cache.coefficient(pk)));
+    let publicKey: Point | undefined = secondPublicKey;
+    for (let i = 0; i < publicKeys.length; i++) {
+      if (i === secondPublicKeyIndex) continue;
+      const pk = publicKeys[i];
+      publicKey = publicKey.multiplyAndAddUnsafe(pk, _1n, yield* cache.coefficient(pk));
+      if (publicKey === undefined) throw new Error('Unexpected public key at infinity');
     }
     return cache.copyWith(publicKey, !hasEvenY(publicKey));
   }
@@ -287,25 +280,26 @@ class MusigKeyAggCache {
     return coef;
   }
 
-  addTweak(tweak: bigint, xOnly: boolean) {
+  addTweak(tweak: bigint, xOnly = false) {
     let publicKey: Point | undefined = this.publicKey;
+    let parityFactor = this.parityFactor;
+
     if (xOnly && !hasEvenY(this.publicKey)) {
       publicKey = publicKey.negate();
     }
     publicKey = Point.BASE.multiplyAndAddUnsafe(publicKey, tweak, _1n);
     if (!publicKey) throw new Error('Tweak failed');
 
-    tweak = mod(this.tweak + tweak, CURVE.n);
-    if (!xOnly) {
-      tweak = CURVE.n - tweak;
+    if (xOnly || hasEvenY(this.publicKey)) {
+      tweak = mod(this.tweak + tweak, CURVE.n);
+    } else {
+      tweak = mod(CURVE.n - this.tweak + tweak, CURVE.n);
+      parityFactor = !parityFactor;
     }
 
-    let parityFactor = this.parityFactor;
-    if (!xOnly && !hasEvenY(this.publicKey)) {
-      parityFactor = !parityFactor;
-    }
     if (!hasEvenY(publicKey)) {
       parityFactor = !parityFactor;
+      tweak = CURVE.n - tweak;
     }
     return this.copyWith(publicKey, parityFactor, tweak);
   }
@@ -398,6 +392,20 @@ class MusigProcessedNonce {
 
 // See https://github.com/ElementsProject/secp256k1-zkp/blob/8fd97d8/include/secp256k1_musig.h#L326
 // TODO: Should we do more to prevent nonce reuse?
+function normalizeNonceArg(p?: PrivKey | PubKey): [Uint8Array] | [Uint8Array, Uint8Array] {
+  if (!p) return [Uint8Array.of(0)];
+  if (p instanceof Point) p = p.x;
+  if (typeof p === 'number') {
+    if (Number.isSafeInteger(p)) throw new Error(`Expected integer, got ${p}`);
+    p = BigInt(p);
+  }
+  if (typeof p === 'bigint') {
+    return [Uint8Array.of(32), numTo32b(p)];
+  }
+  const b = ensureBytes(p);
+  return [Uint8Array.of(32), b.subarray(b.length - 32)];
+}
+
 function* musigNonceGen(
   sessionId: Hex = utils.randomBytes(),
   privateKey?: PrivKey,
@@ -407,10 +415,10 @@ function* musigNonceGen(
 ): U8AGenerator<{ privateNonce: Uint8Array; publicNonce: Uint8Array }> {
   const messages: Uint8Array[] = [];
   messages.push(ensureBytes(sessionId));
-  if (privateKey) messages.push(normalize32b(privateKey));
-  if (message) messages.push(ensureBytes(message));
-  if (aggregatePublicKey) messages.push(normalize32b(aggregatePublicKey));
-  if (extraInput) messages.push(ensureBytes(extraInput));
+  messages.push(...normalizeNonceArg(privateKey));
+  messages.push(...normalizeNonceArg(message));
+  messages.push(...normalizeNonceArg(aggregatePublicKey));
+  messages.push(...normalizeNonceArg(extraInput));
   const seed = yield* taggedHash(TAGS.musig_nonce, ...messages);
   const privateNonce = new Uint8Array(64);
   const publicNonce = new Uint8Array(66);
@@ -440,7 +448,8 @@ function* musigNonceProcess(
   const coefficient = bytesToNumber(coefficientHash);
 
   const aggNonces = normalizeMusigPublicNonce(aggNonce);
-  const finalNonce = aggNonces[0].add(aggNonces[1].multiply(coefficient));
+  const finalNonce = aggNonces[0].multiplyAndAddUnsafe(aggNonces[1], _1n, coefficient);
+  if (finalNonce === undefined) throw new Error('Unexpected final nonce at infinity');
 
   const finalNonceX = finalNonce.toRawX();
   const challengeHash = yield* taggedHash(TAGS.challenge, finalNonceX, pubKeyX, message);
@@ -469,7 +478,8 @@ function* musigPartialVerifyInner(
 ): U8AGenerator<boolean> {
   const publicNonces = normalizeMusigPublicNonce(publicNonce);
 
-  let rj = publicNonces[0].add(publicNonces[1].multiply(processedNonce.coefficient));
+  let rj = publicNonces[0].multiplyAndAddUnsafe(publicNonces[1], _1n, processedNonce.coefficient);
+  if (rj === undefined) throw new Error('Unexpected public nonce at infinity');
   if (processedNonce.finalNonceHasOddY) {
     rj = rj.negate();
   }
@@ -499,6 +509,11 @@ function* musigPartialSign(
   const mu = yield* cache.coefficient(publicKey);
   const processedNonce = yield* musigNonceProcess(aggNonce, ensureBytes(message), cache);
   const privateNonces = normalizeMusigPrivateNonce(nonce.privateNonce);
+  // Do this before we modify the private nonces below.
+  const publicNonce = nonce.publicNonce || [
+    Point.fromPrivateKey(privateNonces[0]),
+    Point.fromPrivateKey(privateNonces[1]),
+  ];
 
   if (hasEvenY(publicKey) === cache.parityFactor) {
     privateKey = CURVE.n - privateKey;
@@ -518,7 +533,7 @@ function* musigPartialSign(
   const valid = yield* musigPartialVerifyInner(
     sig,
     verificationKey,
-    nonce.publicNonce,
+    publicNonce,
     cache,
     processedNonce
   );
@@ -537,11 +552,10 @@ function* musigPartialVerify(
 ): U8AGenerator<false | { session: string }> {
   const cache = MusigKeyAggCache.fromHex(keyAggCache);
   const processedNonce = yield* musigNonceProcess(aggNonce, ensureBytes(message), cache);
-  const publicKey = normalizeEvenPublicKey(pubKey);
 
   const valid = yield* musigPartialVerifyInner(
     normalizePrivateKey(sig),
-    publicKey,
+    normalizeEvenPublicKey(pubKey),
     publicNonce,
     cache,
     processedNonce
@@ -550,20 +564,36 @@ function* musigPartialVerify(
 }
 
 // X-only keys in
-export async function keyAgg(publicKeys: PubKey[], tweak?: PrivKey): Promise<MusigPublicKey> {
-  const cache = await callAsync(MusigKeyAggCache.fromPublicKeys(publicKeys));
-  if (tweak !== undefined) cache.addTweak(normalizePrivateKey(tweak), false);
+export async function keyAgg(
+  publicKeys: PubKey[],
+  opts: {
+    tweak?: PrivKey;
+    xOnlyTweak?: boolean;
+    sort?: boolean;
+  }
+): Promise<MusigPublicKey> {
+  let cache = await callAsync(MusigKeyAggCache.fromPublicKeys(publicKeys, opts.sort));
+  if (opts.tweak !== undefined)
+    cache = cache.addTweak(normalizePrivateKey(opts.tweak), opts.xOnlyTweak);
   return cache.toMusigPublicKey();
 }
-export function keyAggSync(publicKeys: PubKey[], tweak?: PrivKey): MusigPublicKey {
-  const cache = callSync(MusigKeyAggCache.fromPublicKeys(publicKeys));
-  if (tweak !== undefined) cache.addTweak(normalizePrivateKey(tweak), false);
+export function keyAggSync(
+  publicKeys: PubKey[],
+  opts: {
+    tweak?: PrivKey;
+    xOnlyTweak?: boolean;
+    sort?: boolean;
+  }
+): MusigPublicKey {
+  let cache = callSync(MusigKeyAggCache.fromPublicKeys(publicKeys, opts.sort));
+  if (opts.tweak !== undefined)
+    cache = cache.addTweak(normalizePrivateKey(opts.tweak), opts.xOnlyTweak);
   return cache.toMusigPublicKey();
 }
 
-export function tweak(keyAggCache: Hex, tweak: PrivKey, xOnly: boolean = true): MusigPublicKey {
-  const cache = MusigKeyAggCache.fromHex(keyAggCache);
-  cache.addTweak(normalizePrivateKey(tweak), xOnly);
+export function tweak(keyAggCache: Hex, tweak: PrivKey, xOnlyTweak?: boolean): MusigPublicKey {
+  let cache = MusigKeyAggCache.fromHex(keyAggCache);
+  cache = cache.addTweak(normalizePrivateKey(tweak), xOnlyTweak);
   return cache.toMusigPublicKey();
 }
 

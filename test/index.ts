@@ -1,6 +1,7 @@
 import * as fc from 'fast-check';
 import { schnorr, utils } from '@noble/secp256k1';
 import * as musig from '..';
+import * as vectors from './vectors.json';
 
 interface Signer {
   privateKey: Uint8Array;
@@ -12,7 +13,7 @@ interface Signer {
 const tweaks = new Array(5).fill(0).map(() => utils.randomPrivateKey());
 
 for (let nSigners = 1; nSigners < 5; nSigners++) {
-  describe(`musig(${nSigners})`, function() {
+  describe(`random musig(${nSigners})`, function() {
 
     let publicKey: musig.MusigPublicKey;
     let signers: Signer[] = [];
@@ -31,7 +32,7 @@ for (let nSigners = 1; nSigners < 5; nSigners++) {
     it('aggregates keys', async function() {
       publicKey = await musig.keyAgg(
         signers.map(({ publicKey }) => publicKey),
-        nSigners % 2 === 1 ? tweaks[0] : undefined
+        { tweak: nSigners % 2 === 1 ? tweaks[0] : undefined }
       );
     });
 
@@ -118,3 +119,56 @@ for (let nSigners = 1; nSigners < 5; nSigners++) {
     }
   });
 }
+
+describe('keyAgg vectors', function() {
+  for (const [name, vector] of Object.entries(vectors.keyAggVectors)) {
+    it(`aggregates keys ${name}`, async function() {
+      const publicKeys = vector.publicKeyIndices.map((i) => vectors.publicKeys[i]);
+      const key = await musig.keyAgg(publicKeys, { sort: false });
+      expect(Buffer.from(key.publicKey).toString('hex')).toBe(vector.expected);
+      const secondPublicKey = key.keyAggCache.slice((33 + 32) * 2, (33 + 32 + 32) * 2);
+      if ('secondPublicKeyIndex' in vector) {
+        expect(secondPublicKey).toBe(publicKeys[vector.secondPublicKeyIndex]);
+      } else {
+        expect(secondPublicKey).toBe(new Array(65).join('0'));
+      }
+    });
+  }
+});
+
+describe('nonceGen vectors', function() {
+  for (const [name, vector] of Object.entries(vectors.nonceVectors)) {
+    it(`generates nonces ${name}`, async function() {
+      const args: Array<string | undefined> = [...vectors.nonceArgs];
+      vector.blankArgs.forEach((i) => args[i] = undefined);
+      const nonce = await musig.nonceGen(...args);
+      expect(Buffer.from(nonce.privateNonce).toString('hex')).toBe(vector.expected);
+    });
+  }
+});
+
+describe('sign vectors', function() {
+  for (const [name, vector] of Object.entries(vectors.signVectors)) {
+    const { msg, privateNonce, aggNonce, signingKey, nonSignerKeyIndices } = vectors.signData;
+    it(`partial signs ${name}`, async function() {
+      const publicKeys: Array<string | Uint8Array> = nonSignerKeyIndices.map((i) => vectors.publicKeys[i]);
+      const signingPublicKey = schnorr.getPublicKey(signingKey);
+      publicKeys.splice(vector.signerIndex, 0, signingPublicKey);
+
+      let parity, keyAggCache;
+      if ('tweak' in vector) {
+        ({ parity, keyAggCache } = await musig.keyAgg(
+          publicKeys,
+          { tweak: vector.tweak, xOnlyTweak: vector.xOnlyTweak, sort: false}
+        ));
+      } else {
+        ({ parity, keyAggCache } = await musig.keyAgg(publicKeys, { sort: false }));
+      }
+      expect(parity).toBe(vector.expectedParity);
+
+      const { sig, session } = await musig.partialSign(msg, signingKey, {privateNonce}, aggNonce, keyAggCache);
+      expect(Buffer.from(sig).toString('hex')).toBe(vector.expectedS);
+      expect(Buffer.from(session, 'hex')[0]).toBe(vector.expectedNonceParity);
+    });
+  }
+});
