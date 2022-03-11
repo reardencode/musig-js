@@ -9,10 +9,13 @@
   "module": "lib/esm/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
-    "build": "tsc -d && tsc -p tsconfig.esm.json",
+    "build": "tsc -d && tsc -p tsconfig.esm.json && npm run prettierout -- --write",
     "build:release": "rollup -c rollup.config.js",
-    "lint": "prettier --print-width 100 --single-quote --check index.ts",
-    "format": "prettier --print-width 100 --single-quote --write index.ts",
+    "lint": "tslint -p tsconfig.json -c tslint.json",
+    "format": "npm run prettier -- --write",
+    "format:ci": "npm run prettier -- --check && npm run prettierout -- --check",
+    "prettier": "prettier --print-width 100 --single-quote \"*.ts\" \"test/**/*.ts\" \"test/**/*.js\"",
+    "prettierout": "prettier --print-width 100 --single-quote \"lib/**/*.js\"",
     "test": "jest",
     "coverage": "jest --coverage",
     "bench": "node test/benchmark.js"
@@ -28,7 +31,8 @@
     "crypto": false
   },
   "dependencies": {
-    "@noble/secp256k1": "git+https://github.com/brandonblack/noble-secp256k1#601438008aa532334cf403948850d56966f34f36"
+    "@noble/secp256k1": "git+https://github.com/brandonblack/noble-secp256k1#601438008aa532334cf403948850d56966f34f36",
+    "tslint": "^6.1.3"
   },
   "devDependencies": {
     "@noble/hashes": "~1.0.0",

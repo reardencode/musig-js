@@ -220,7 +220,7 @@ class MusigKeyAggCache {
     readonly tweak: bigint = _0n,
     private readonly _coefCache = new Map<bigint, bigint>()
   ) {}
-  private copyWith(publicKey: Point, parity: boolean, tweak?: bigint) {
+  private copyWith(publicKey: Point, parity: boolean, tweak?: bigint): MusigKeyAggCache {
     const cache = new MusigKeyAggCache(
       this.publicKeyHash,
       this.secondPublicKeyX,
@@ -235,7 +235,7 @@ class MusigKeyAggCache {
 
   static *fromPublicKeys(pubKeys: PubKey[], sort = true): U8AGenerator<MusigKeyAggCache> {
     if (pubKeys.length === 0) throw new Error('Cannot aggregate 0 public keys');
-    const publicKeys = pubKeys.map((publicKey) => normalizeEvenPublicKey(publicKey));
+    const publicKeys = pubKeys.map((pk) => normalizeEvenPublicKey(pk));
     if (sort) publicKeys.sort((a, b) => (a.x > b.x ? 1 : -1)); // Equivalent to lexicographically sorting the hex
     const secondPublicKeyIndex = publicKeys.findIndex((pk) => !publicKeys[0].equals(pk));
     const secondPublicKey =
@@ -258,7 +258,7 @@ class MusigKeyAggCache {
     return cache.copyWith(publicKey, !hasEvenY(publicKey));
   }
 
-  assertValidity() {
+  assertValidity(): void {
     this.publicKey.assertValidity();
     if (
       this.publicKeyHash.length !== 32 ||
@@ -280,7 +280,7 @@ class MusigKeyAggCache {
     return coef;
   }
 
-  addTweak(tweak: bigint, xOnly = false) {
+  addTweak(tweak: bigint, xOnly = false): MusigKeyAggCache {
     let publicKey: Point | undefined = this.publicKey;
     if (xOnly && !hasEvenY(this.publicKey)) {
       publicKey = this.publicKey.negate();
@@ -313,7 +313,7 @@ class MusigKeyAggCache {
       numTo32bStr(this.tweak)
     );
   }
-  static fromHex(hex: Hex) {
+  static fromHex(hex: Hex): MusigKeyAggCache {
     // 33+32+32+1+32
     const bytes = ensureBytes(hex);
     if (bytes.length !== 130)
@@ -355,7 +355,7 @@ class MusigProcessedNonce {
   ) {
     this.assertValidity();
   }
-  static fromHex(hex: Hex) {
+  static fromHex(hex: Hex): MusigProcessedNonce {
     const bytes = ensureBytes(hex);
     if (bytes.length !== 129)
       throw new TypeError(`MusigProcessedNonce.fromHex: expected 129 bytes, not ${bytes.length}`);
@@ -367,7 +367,7 @@ class MusigProcessedNonce {
       bytesToNumber(bytes.subarray(97, 129))
     );
   }
-  assertValidity() {
+  assertValidity(): void {
     if (
       !isValidFieldElement(this.finalNonceX) ||
       !isWithinCurveOrder(this.coefficient) ||
@@ -591,7 +591,7 @@ export function keyAggSync(
   return cache.toMusigPublicKey();
 }
 
-export function tweak(keyAggCache: Hex, tweak: PrivKey, xOnlyTweak?: boolean): MusigPublicKey {
+export function addTweak(keyAggCache: Hex, tweak: PrivKey, xOnlyTweak?: boolean): MusigPublicKey {
   let cache = MusigKeyAggCache.fromHex(keyAggCache);
   cache = cache.addTweak(normalizePrivateKey(tweak), xOnlyTweak);
   return cache.toMusigPublicKey();
