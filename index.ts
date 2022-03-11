@@ -570,7 +570,7 @@ export async function keyAgg(
     tweak?: PrivKey;
     xOnlyTweak?: boolean;
     sort?: boolean;
-  }
+  } = {}
 ): Promise<MusigPublicKey> {
   let cache = await callAsync(MusigKeyAggCache.fromPublicKeys(publicKeys, opts.sort));
   if (opts.tweak !== undefined)
@@ -583,7 +583,7 @@ export function keyAggSync(
     tweak?: PrivKey;
     xOnlyTweak?: boolean;
     sort?: boolean;
-  }
+  } = {}
 ): MusigPublicKey {
   let cache = callSync(MusigKeyAggCache.fromPublicKeys(publicKeys, opts.sort));
   if (opts.tweak !== undefined)
