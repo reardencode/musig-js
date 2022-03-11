@@ -43,11 +43,11 @@ const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '
 function bytesToHex(uint8a: Uint8Array): string {
   if (!(uint8a instanceof Uint8Array)) throw new Error('Expected Uint8Array');
   // pre-caching improves the speed 6x
-  let hex = '';
+  const a = new Array(uint8a.length); // 40% faster vs progressive string concatenation
   for (let i = 0; i < uint8a.length; i++) {
-    hex += hexes[uint8a[i]];
+    a[i] = hexes[uint8a[i]];
   }
-  return hex;
+  return a.join('');
 }
 
 function numTo32bStr(num: number | bigint): string {
