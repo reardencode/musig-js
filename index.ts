@@ -39,7 +39,7 @@ function isUint8a(bytes: Uint8Array | unknown): bytes is Uint8Array {
   return bytes instanceof Uint8Array;
 }
 
-const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
+const hexes = new Array(256).fill(0).map((_, i) => i.toString(16).padStart(2, '0'));
 function bytesToHex(uint8a: Uint8Array): string {
   if (!(uint8a instanceof Uint8Array)) throw new Error('Expected Uint8Array');
   // pre-caching improves the speed 6x
