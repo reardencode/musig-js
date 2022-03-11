@@ -8,13 +8,13 @@ const vectors = require('./vectors.json');
 
 secp.utils.hmacSha256Sync = (key, ...msgs) => {
   const h = hmac.create(sha256, key);
-  msgs.forEach(msg => h.update(msg))
+  msgs.forEach((msg) => h.update(msg));
   return h.digest();
 };
 
 secp.utils.sha256Sync = (...msgs) => {
   const h = sha256.create();
-  msgs.forEach(msg => h.update(msg))
+  msgs.forEach((msg) => h.update(msg));
   return h.digest();
 };
 
@@ -40,7 +40,8 @@ run(async (windowSize) => {
   });
 
   const { msg, privateNonce, aggNonce, signingKey, nonSignerKeyIndices } = vectors.signData;
-  const publicNonce = secp.utils.bytesToHex(secp.getPublicKey(privateNonce.slice(0, 64), true)) + 
+  const publicNonce =
+    secp.utils.bytesToHex(secp.getPublicKey(privateNonce.slice(0, 64), true)) +
     secp.utils.bytesToHex(secp.getPublicKey(privateNonce.slice(64), true));
   const vector = vectors.signVectors.odd;
 
@@ -49,12 +50,21 @@ run(async (windowSize) => {
   publicKeys.splice(vector.signerIndex, 0, signingPublicKey);
   const { keyAggCache } = await musig.keyAgg(vectors.publicKeys);
 
-  const { sig, session } = await musig.partialSign(msg, signingKey, {privateNonce}, aggNonce, keyAggCache);
+  const { sig, session } = await musig.partialSign(
+    msg,
+    signingKey,
+    { privateNonce },
+    aggNonce,
+    keyAggCache
+  );
   await mark('partialSign', 250, async () => {
-    musig.partialSign(msg, signingKey, {privateNonce}, aggNonce, keyAggCache);
+    musig.partialSign(msg, signingKey, { privateNonce }, aggNonce, keyAggCache);
   });
   await mark('partialVerify', 250, async () => {
     musig.partialVerify(sig, msg, signingPublicKey, publicNonce, aggNonce, keyAggCache);
+  });
+  await mark('partialVerify w/session', 250, async () => {
+    musig.partialVerify(sig, msg, signingPublicKey, publicNonce, aggNonce, keyAggCache, session);
   });
 
   console.log();

@@ -548,10 +548,13 @@ function* musigPartialVerify(
   pubKey: PubKey,
   publicNonce: MusigPublicNonce,
   aggNonce: MusigPublicNonce,
-  keyAggCache: Hex
+  keyAggCache: Hex,
+  session?: Hex
 ): U8AGenerator<false | { session: string }> {
   const cache = MusigKeyAggCache.fromHex(keyAggCache);
-  const processedNonce = yield* musigNonceProcess(aggNonce, ensureBytes(message), cache);
+  const processedNonce = session
+    ? MusigProcessedNonce.fromHex(session)
+    : yield* musigNonceProcess(aggNonce, ensureBytes(message), cache);
 
   const valid = yield* musigPartialVerifyInner(
     normalizePrivateKey(sig),
@@ -643,9 +646,12 @@ export function partialVerify(
   publicKey: PubKey,
   publicNonce: MusigPublicNonce,
   aggNonce: MusigPublicNonce,
-  keyAggCache: Hex
+  keyAggCache: Hex,
+  session?: Hex
 ): Promise<false | { session: string }> {
-  return callAsync(musigPartialVerify(sig, message, publicKey, publicNonce, aggNonce, keyAggCache));
+  return callAsync(
+    musigPartialVerify(sig, message, publicKey, publicNonce, aggNonce, keyAggCache, session)
+  );
 }
 
 export function partialVerifySync(
@@ -654,9 +660,12 @@ export function partialVerifySync(
   publicKey: PubKey,
   publicNonce: MusigPublicNonce,
   aggNonce: MusigPublicNonce,
-  keyAggCache: Hex
+  keyAggCache: Hex,
+  session?: Hex
 ): false | { session: string } {
-  return callSync(musigPartialVerify(sig, message, publicKey, publicNonce, aggNonce, keyAggCache));
+  return callSync(
+    musigPartialVerify(sig, message, publicKey, publicNonce, aggNonce, keyAggCache, session)
+  );
 }
 
 export function signAgg(sigs: PrivKey[], session: Hex): Uint8Array {
