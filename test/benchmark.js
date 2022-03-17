@@ -30,13 +30,13 @@ run(async (windowSize) => {
   console.log();
 
   await mark('keyAgg(2)', 500, async () => {
-    musig.keyAgg(vectors.publicKeys.slice(1));
+    return musig.keyAgg(vectors.publicKeys.slice(1));
   });
   await mark('keyAgg(3)', 400, async () => {
-    musig.keyAgg(vectors.publicKeys);
+    return musig.keyAgg(vectors.publicKeys);
   });
   await mark('keyAgg(5)', 250, async () => {
-    musig.keyAgg(vectors.publicKeys.concat(vectors.publicKeys.slice(1)));
+    return musig.keyAgg(vectors.publicKeys.concat(vectors.publicKeys.slice(1)));
   });
 
   const { msg, privateNonce, aggNonce, signingKey, nonSignerKeyIndices } = vectors.signData;
@@ -49,6 +49,15 @@ run(async (windowSize) => {
   const signingPublicKey = secp.utils.bytesToHex(secp.schnorr.getPublicKey(signingKey));
   publicKeys.splice(vector.signerIndex, 0, signingPublicKey);
   const { keyAggCache } = await musig.keyAgg(vectors.publicKeys);
+
+  const tweaks = new Array(100).fill(0).map(() => secp.utils.randomBytes());
+  let xOnly = false;
+  let i = 0;
+  await mark('addTweak', 1000, async () => {
+    await musig.addTweak(keyAggCache, tweaks[i], xOnly);
+    xOnly = !xOnly;
+    i = (i + 17) % tweaks.length;
+  });
 
   const { sig, session } = await musig.partialSign(
     msg,

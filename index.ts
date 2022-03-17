@@ -250,16 +250,16 @@ class MusigKeyAggCache {
     // If > 1 unique X-values in the key, keys with Xs identical to 2nd unique X use coffecient = 1
     readonly secondPublicKeyX: bigint,
     readonly publicKey: Point = Point.ZERO, // Current aggregate public key
-    readonly parity: boolean = true,
+    readonly parityFactor: -1 | 1 = -1,
     readonly tweak: bigint = _0n,
     private readonly _coefCache = new Map<bigint, bigint>()
   ) {}
-  private copyWith(publicKey: Point, parity: boolean, tweak?: bigint): MusigKeyAggCache {
+  private copyWith(publicKey: Point, parityFactor: -1 | 1, tweak?: bigint): MusigKeyAggCache {
     const cache = new MusigKeyAggCache(
       this.publicKeyHash,
       this.secondPublicKeyX,
       publicKey,
-      parity,
+      parityFactor,
       tweak,
       this._coefCache
     );
@@ -289,7 +289,7 @@ class MusigKeyAggCache {
       publicKey = publicKey.multiplyAndAddUnsafe(pk, _1n, yield* cache.coefficient(pk));
       if (publicKey === undefined) throw new Error('Unexpected public key at infinity');
     }
-    return cache.copyWith(publicKey, !hasEvenY(publicKey));
+    return cache.copyWith(publicKey, hasEvenY(publicKey) ? 1 : -1);
   }
 
   assertValidity(): void {
@@ -314,28 +314,31 @@ class MusigKeyAggCache {
     return coef;
   }
 
-  addTweak(tweak: bigint, xOnly = false): MusigKeyAggCache {
+  addTweak(newTweak: bigint, xOnly = false): MusigKeyAggCache {
     let publicKey: Point | undefined = this.publicKey;
-    if (xOnly && !hasEvenY(this.publicKey)) {
-      publicKey = this.publicKey.negate();
+    let parityFactor = this.parityFactor;
+    let tweak = this.tweak;
+    if (!hasEvenY(this.publicKey)) {
+      if (xOnly) {
+        publicKey = publicKey.negate(); // -1 * Q[v-1]
+      } else {
+        // [undo] Previous tweak multiplied in g[v] = -1, now g[v-1] is 1
+        parityFactor = parityFactor === 1 ? -1 : 1;
+        tweak = CURVE.n - tweak;
+      }
     }
-    publicKey = Point.BASE.multiplyAndAddUnsafe(publicKey, tweak, _1n);
-    if (!publicKey) throw new Error('Tweak failed');
 
-    let parity = this.parity;
-    if (xOnly || hasEvenY(this.publicKey)) {
-      tweak = mod(this.tweak + tweak, CURVE.n);
-    } else {
-      parity = !parity;
-      tweak = mod(CURVE.n - this.tweak + tweak, CURVE.n);
-    }
+    publicKey = Point.BASE.multiplyAndAddUnsafe(publicKey, newTweak, _1n); // +/-Q + tG
+    if (!publicKey) throw new Error('Tweak failed');
+    tweak = mod(tweak + newTweak, CURVE.n);
 
     if (!hasEvenY(publicKey)) {
-      parity = !parity;
+      // [do] Assume this is the v-th (last) tweak. Multiply in g[v] = -1
+      parityFactor = parityFactor === 1 ? -1 : 1;
       tweak = CURVE.n - tweak;
     }
 
-    return this.copyWith(publicKey, parity, tweak);
+    return this.copyWith(publicKey, parityFactor, tweak);
   }
 
   toHex(): string {
@@ -343,7 +346,7 @@ class MusigKeyAggCache {
       this.publicKey.toHex(true) +
       bytesToHex(this.publicKeyHash) +
       numTo32bStr(this.secondPublicKeyX) +
-      (this.parity ? '01' : '00') +
+      (this.parityFactor === 1 ? '00' : '01') +
       numTo32bStr(this.tweak)
     );
   }
@@ -356,7 +359,7 @@ class MusigKeyAggCache {
       bytes.subarray(33, 65),
       bytesToNumber(bytes.subarray(65, 97)),
       Point.fromHex(bytes.subarray(0, 33)),
-      bytes[97] === 1,
+      bytes[97] === 1 ? -1 : 1,
       bytesToNumber(bytes.subarray(98, 130))
     );
     cache.assertValidity();
@@ -520,7 +523,7 @@ function* musigPartialVerifyInner(
   const mu = yield* cache.coefficient(publicKey);
   let e = processedNonce.challenge;
   // This condition is inverted from secp256k1-zkp's version to facilitate .equals comparison
-  if (!cache.parity) {
+  if (cache.parityFactor === 1) {
     e = CURVE.n - e; // Negate any of e, mu, publicKey.
   }
 
@@ -549,7 +552,7 @@ function* musigPartialSign(
     Point.fromPrivateKey(privateNonces[1]),
   ];
 
-  if (hasEvenY(publicKey) === cache.parity) {
+  if (hasEvenY(publicKey) !== (cache.parityFactor === 1)) {
     privateKey = CURVE.n - privateKey;
   }
   privateKey = mod(privateKey * mu, CURVE.n);

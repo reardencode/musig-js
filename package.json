@@ -31,7 +31,6 @@
     "crypto": false
   },
   "dependencies": {
-    "@noble/secp256k1": "git+https://github.com/brandonblack/noble-secp256k1#7e823a8bd8bec6dfd803bae5bfe4bec16a83b726",
     "tslint": "^6.1.3"
   },
   "devDependencies": {
