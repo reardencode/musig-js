@@ -551,8 +551,8 @@ function* musigPartialSign(
     Point.fromPrivateKey(privateNonces[1]),
   ];
 
-  for (let i = 0; i < privateNonces.length; i++) {
-    if (processedNonce.finalNonceHasOddY) {
+  if (processedNonce.finalNonceHasOddY) {
+    for (let i = 0; i < privateNonces.length; i++) {
       privateNonces[i] = CURVE.n - privateNonces[i];
     }
   }
