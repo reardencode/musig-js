@@ -250,8 +250,8 @@ class MusigKeyAggCache {
     // If > 1 unique X-values in the key, keys with Xs identical to 2nd unique X use coffecient = 1
     readonly secondPublicKeyX: bigint,
     readonly publicKey: Point = Point.ZERO, // Current aggregate public key
-    readonly parity?: boolean,
-    readonly tweak?: bigint,
+    readonly parity: boolean = false,
+    readonly tweak: bigint = _0n,
     private readonly _coefCache = new Map<bigint, bigint>()
   ) {}
   private copyWith(publicKey: Point, parity?: boolean, tweak?: bigint): MusigKeyAggCache {
@@ -297,7 +297,7 @@ class MusigKeyAggCache {
     if (
       this.publicKeyHash.length !== 32 ||
       (this.secondPublicKeyX !== _0n && !isValidFieldElement(this.secondPublicKeyX)) ||
-      (this.tweak !== undefined && !isWithinCurveOrder(this.tweak))
+      (this.tweak !== _0n && !isWithinCurveOrder(this.tweak))
     )
       throw new Error('Invalid KeyAggCache');
   }
@@ -319,8 +319,8 @@ class MusigKeyAggCache {
     if (tweaks.length !== tweaksXOnly.length)
       throw new Error('tweaks and tweaksXOnly have different lengths');
     let publicKey: Point | undefined = this.publicKey;
-    let parity = this.parity === undefined ? false : this.parity;
-    let tweak = this.tweak === undefined ? _0n : this.tweak;
+    let parity = this.parity;
+    let tweak = this.tweak;
 
     for (let i = 0; i < tweaks.length; i++) {
       if (!hasEvenY(publicKey) && tweaksXOnly[i]) {
@@ -341,8 +341,8 @@ class MusigKeyAggCache {
       this.publicKey.toHex(true) +
       bytesToHex(this.publicKeyHash) +
       numTo32bStr(this.secondPublicKeyX) +
-      (this.parity === undefined ? 'FF' : this.parity ? '01' : '00') +
-      numTo32bStr(this.tweak || _0n)
+      (this.parity ? '01' : '00') +
+      numTo32bStr(this.tweak)
     );
   }
   static fromHex(hex: Hex): MusigKeyAggCache {
@@ -350,13 +350,12 @@ class MusigKeyAggCache {
     const bytes = ensureBytes(hex);
     if (bytes.length !== 130)
       throw new TypeError(`MusigKeyAggCache.fromHex: expected 130 bytes, not ${bytes.length}`);
-    const tweak = bytesToNumber(bytes.subarray(98, 130));
     const cache = new MusigKeyAggCache(
       bytes.subarray(33, 65),
       bytesToNumber(bytes.subarray(65, 97)),
       Point.fromHex(bytes.subarray(0, 33)),
-      bytes[97] === 0xff ? undefined : bytes[97] === 0x01,
-      tweak === _0n ? undefined : tweak
+      bytes[97] === 0x01,
+      bytesToNumber(bytes.subarray(98, 130))
     );
     cache.assertValidity();
     return cache;
@@ -520,9 +519,9 @@ function* musigPartialVerifyInner(
     rj = rj.negate();
   }
 
-  let parity = !hasEvenY(cache.publicKey);
-  if (cache.parity) parity = !parity;
-  if (parity) {
+  // negative of the implementation in libsecp256k1-zkp due to a different but
+  // algebraically identical verification equation used for convenience
+  if (hasEvenY(cache.publicKey) === cache.parity) {
     publicKey = publicKey.negate();
   }
 
@@ -561,10 +560,8 @@ function* musigPartialSign(
   const publicKey = Point.fromPrivateKey(privateKey);
   const a = yield* cache.coefficient(publicKey);
 
-  let parity = !hasEvenY(publicKey); // gp
-  if (!hasEvenY(cache.publicKey)) parity = !parity; // gv
-  if (cache.parity) parity = !parity; // g
-  if (parity) {
+  // double-negative of the implementation in libsecp256k1-zkp
+  if (hasEvenY(publicKey) !== cache.parity !== hasEvenY(cache.publicKey)) {
     privateKey = CURVE.n - privateKey;
   }
   const ad = mod(privateKey * a, CURVE.n);
