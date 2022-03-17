@@ -11,6 +11,7 @@ interface Signer {
 }
 
 const tweaks = new Array(5).fill(0).map(() => utils.randomPrivateKey());
+const tweaksXOnly = new Array(5).fill(0).map((_, i) => (tweaks[0][i] & 1) === 1);
 
 for (let nSigners = 1; nSigners < 5; nSigners++) {
   describe(`random musig(${nSigners})`, function () {
@@ -29,19 +30,30 @@ for (let nSigners = 1; nSigners < 5; nSigners++) {
     });
 
     it('aggregates keys', async function () {
-      publicKey = await musig.keyAgg(
-        signers.map(({ publicKey }) => publicKey),
-        { tweak: nSigners % 2 === 1 ? tweaks[0] : undefined }
-      );
+      publicKey = await musig.keyAgg(signers.map(({ publicKey }) => publicKey));
     });
 
     for (let i = 0; i < tweaks.length; i++) {
       describe(`tweak(${i})`, function () {
-        if (i !== 0) {
-          it('tweaks a key', function () {
-            publicKey = musig.addTweak(publicKey.keyAggCache, tweaks[i], i === nSigners % 3);
-          });
-        }
+        it('tweaks a key', function () {
+          publicKey = musig.addTweaks(
+            publicKey.keyAggCache,
+            tweaks.slice(i, i + 1),
+            tweaksXOnly.slice(i, i + 1)
+          );
+        });
+
+        it('aggregates keys with all tweaks', async function () {
+          expect(
+            await musig.keyAgg(
+              signers.map(({ publicKey }) => publicKey),
+              {
+                tweaks: tweaks.slice(0, i + 1),
+                tweaksXOnly: tweaksXOnly.slice(0, i + 1),
+              }
+            )
+          ).toEqual(publicKey);
+        });
 
         it('makes nonces', async function () {
           for (let j = 0; j < signers.length; j++) {
@@ -116,8 +128,22 @@ for (let nSigners = 1; nSigners < 5; nSigners++) {
           }
         });
 
-        // TODO: it('verifies partial sigs w/ session', function() { });
-        //
+        it('verifies partial sigs', async function () {
+          for (const signer of signers) {
+            expect(
+              await musig.partialVerify(
+                signer.sig!.sig,
+                message,
+                signer.publicKey,
+                signer.noncePair!.publicNonce,
+                aggNonce,
+                publicKey.keyAggCache,
+                signer.sig!.session
+              )
+            ).toBeTruthy();
+          }
+        });
+
         it('aggregates sigs', function () {
           sig = musig.signAgg(
             signers.map(({ sig }) => sig!.sig),
@@ -173,8 +199,8 @@ describe('sign vectors', function () {
       let parity, keyAggCache;
       if ('tweak' in vector) {
         ({ parity, keyAggCache } = await musig.keyAgg(publicKeys, {
-          tweak: vector.tweak,
-          xOnlyTweak: vector.xOnlyTweak,
+          tweaks: [vector.tweak],
+          tweaksXOnly: [vector.xOnlyTweak],
           sort: false,
         }));
       } else {
