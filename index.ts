@@ -250,11 +250,11 @@ class MusigKeyAggCache {
     // If > 1 unique X-values in the key, keys with Xs identical to 2nd unique X use coffecient = 1
     readonly secondPublicKeyX: bigint,
     readonly publicKey: Point = Point.ZERO, // Current aggregate public key
-    readonly parity: boolean = false,
-    readonly tweak: bigint = _0n,
+    readonly parity?: boolean,
+    readonly tweak?: bigint,
     private readonly _coefCache = new Map<bigint, bigint>()
   ) {}
-  private copyWith(publicKey: Point, parity: boolean, tweak?: bigint): MusigKeyAggCache {
+  private copyWith(publicKey: Point, parity?: boolean, tweak?: bigint): MusigKeyAggCache {
     const cache = new MusigKeyAggCache(
       this.publicKeyHash,
       this.secondPublicKeyX,
@@ -289,7 +289,7 @@ class MusigKeyAggCache {
       publicKey = publicKey.multiplyAndAddUnsafe(pk, _1n, yield* cache.coefficient(pk));
       if (publicKey === undefined) throw new Error('Unexpected public key at infinity');
     }
-    return cache.copyWith(publicKey, !hasEvenY(publicKey));
+    return cache.copyWith(publicKey);
   }
 
   assertValidity(): void {
@@ -297,7 +297,7 @@ class MusigKeyAggCache {
     if (
       this.publicKeyHash.length !== 32 ||
       (this.secondPublicKeyX !== _0n && !isValidFieldElement(this.secondPublicKeyX)) ||
-      (this.tweak !== _0n && !isWithinCurveOrder(this.tweak))
+      (this.tweak !== undefined && !isWithinCurveOrder(this.tweak))
     )
       throw new Error('Invalid KeyAggCache');
   }
@@ -319,14 +319,8 @@ class MusigKeyAggCache {
     if (tweaks.length !== tweaksXOnly.length)
       throw new Error('tweaks and tweaksXOnly have different lengths');
     let publicKey: Point | undefined = this.publicKey;
-    let parity = this.parity;
-    let tweak = this.tweak;
-
-    if (!hasEvenY(publicKey)) {
-      // [undo] Previous tweak multiplied in g[v] = -1
-      parity = !parity;
-      tweak = CURVE.n - tweak;
-    }
+    let parity = this.parity === undefined ? false : this.parity;
+    let tweak = this.tweak === undefined ? _0n : this.tweak;
 
     for (let i = 0; i < tweaks.length; i++) {
       if (!hasEvenY(publicKey) && tweaksXOnly[i]) {
@@ -339,12 +333,6 @@ class MusigKeyAggCache {
       tweak = mod(tweak + tweaks[i], CURVE.n);
     }
 
-    if (!hasEvenY(publicKey)) {
-      // [do] Assume this is the v-th (last) tweak. Multiply in g[v] = -1
-      parity = !parity;
-      tweak = CURVE.n - tweak;
-    }
-
     return this.copyWith(publicKey, parity, tweak);
   }
 
@@ -353,8 +341,8 @@ class MusigKeyAggCache {
       this.publicKey.toHex(true) +
       bytesToHex(this.publicKeyHash) +
       numTo32bStr(this.secondPublicKeyX) +
-      (this.parity ? '01' : '00') +
-      numTo32bStr(this.tweak)
+      (this.parity === undefined ? 'FF' : this.parity ? '01' : '00') +
+      numTo32bStr(this.tweak || _0n)
     );
   }
   static fromHex(hex: Hex): MusigKeyAggCache {
@@ -362,12 +350,13 @@ class MusigKeyAggCache {
     const bytes = ensureBytes(hex);
     if (bytes.length !== 130)
       throw new TypeError(`MusigKeyAggCache.fromHex: expected 130 bytes, not ${bytes.length}`);
+    const tweak = bytesToNumber(bytes.subarray(98, 130));
     const cache = new MusigKeyAggCache(
       bytes.subarray(33, 65),
       bytesToNumber(bytes.subarray(65, 97)),
       Point.fromHex(bytes.subarray(0, 33)),
-      bytes[97] === 1,
-      bytesToNumber(bytes.subarray(98, 130))
+      bytes[97] === 0xff ? undefined : bytes[97] === 0x01,
+      tweak === _0n ? undefined : tweak
     );
     cache.assertValidity();
     return cache;
@@ -500,8 +489,11 @@ function* musigNonceProcess(
   const challenge = mod(bytesToNumber(challengeHash), CURVE.n);
 
   let sPart = _0n;
-  if (cache.tweak !== _0n) {
+  if (cache.tweak) {
     sPart = mod(challenge * cache.tweak, CURVE.n);
+    if (!hasEvenY(cache.publicKey)) {
+      sPart = CURVE.n - sPart;
+    }
   }
 
   return new MusigProcessedNonce(
@@ -527,16 +519,19 @@ function* musigPartialVerifyInner(
   if (processedNonce.finalNonceHasOddY) {
     rj = rj.negate();
   }
-  const mu = yield* cache.coefficient(publicKey);
-  let e = processedNonce.challenge;
-  // This condition is inverted from secp256k1-zkp's version to facilitate .equals comparison
-  if (!cache.parity) {
-    e = CURVE.n - e; // Negate any of e, mu, publicKey.
+
+  let parity = !hasEvenY(cache.publicKey);
+  if (cache.parity) parity = !parity;
+  if (parity) {
+    publicKey = publicKey.negate();
   }
 
-  const ver = Point.BASE.multiplyAndAddUnsafe(publicKey, sig, mod(e * mu, CURVE.n));
+  const a = yield* cache.coefficient(publicKey);
+
+  const ver = publicKey.multiplyAndAddUnsafe(rj, mod(processedNonce.challenge * a, CURVE.n), _1n);
   if (!ver) return false;
-  return ver.equals(rj);
+  const sG = Point.BASE.multiply(sig);
+  return ver.equals(sG);
 }
 
 function* musigPartialSign(
@@ -547,22 +542,15 @@ function* musigPartialSign(
   keyAggCache: Hex
 ): U8AGenerator<{ sig: Uint8Array; session: string }> {
   let privateKey = normalizePrivateKey(privKey);
-  const publicKey = Point.fromPrivateKey(privateKey);
 
   const cache = MusigKeyAggCache.fromHex(keyAggCache);
-  const mu = yield* cache.coefficient(publicKey);
   const processedNonce = yield* musigNonceProcess(aggNonce, ensureBytes(message), cache);
   const privateNonces = normalizeMusigPrivateNonce(nonce.privateNonce);
-  // Do this before we modify the private nonces below.
+  // Do this before we (potentially) modify the private nonces.
   const publicNonce = nonce.publicNonce || [
     Point.fromPrivateKey(privateNonces[0]),
     Point.fromPrivateKey(privateNonces[1]),
   ];
-
-  if (hasEvenY(publicKey) === cache.parity) {
-    privateKey = CURVE.n - privateKey;
-  }
-  privateKey = mod(privateKey * mu, CURVE.n);
 
   for (let i = 0; i < privateNonces.length; i++) {
     if (processedNonce.finalNonceHasOddY) {
@@ -570,8 +558,19 @@ function* musigPartialSign(
     }
   }
 
-  let sig = mod(processedNonce.challenge * privateKey, CURVE.n);
-  sig = mod(sig + privateNonces[0] + privateNonces[1] * processedNonce.coefficient, CURVE.n);
+  const publicKey = Point.fromPrivateKey(privateKey);
+  const a = yield* cache.coefficient(publicKey);
+
+  let parity = !hasEvenY(publicKey); // gp
+  if (!hasEvenY(cache.publicKey)) parity = !parity; // gv
+  if (cache.parity) parity = !parity; // g
+  if (parity) {
+    privateKey = CURVE.n - privateKey;
+  }
+  const ad = mod(privateKey * a, CURVE.n);
+  const ead = mod(processedNonce.challenge * ad, CURVE.n);
+  const bk2 = mod(privateNonces[1] * processedNonce.coefficient, CURVE.n);
+  const sig = mod(ead + privateNonces[0] + bk2, CURVE.n);
 
   const verificationKey = normalizeEvenPublicKey(publicKey);
   const valid = yield* musigPartialVerifyInner(

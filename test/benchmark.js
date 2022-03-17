@@ -53,8 +53,8 @@ run(async (windowSize) => {
   const tweaks = new Array(100).fill(0).map(() => secp.utils.randomBytes());
   let xOnly = false;
   let i = 0;
-  await mark('addTweak', 1000, async () => {
-    await musig.addTweak(keyAggCache, tweaks[i], xOnly);
+  await mark('addTweaks', 1000, async () => {
+    await musig.addTweaks(keyAggCache, tweaks.slice(i, i + 1), [xOnly]);
     xOnly = !xOnly;
     i = (i + 17) % tweaks.length;
   });

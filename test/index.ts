@@ -33,27 +33,29 @@ for (let nSigners = 1; nSigners < 5; nSigners++) {
       publicKey = await musig.keyAgg(signers.map(({ publicKey }) => publicKey));
     });
 
-    for (let i = 0; i < tweaks.length; i++) {
-      describe(`tweak(${i})`, function () {
-        it('tweaks a key', function () {
-          publicKey = musig.addTweaks(
-            publicKey.keyAggCache,
-            tweaks.slice(i, i + 1),
-            tweaksXOnly.slice(i, i + 1)
-          );
-        });
+    for (let i = -1; i < tweaks.length; i++) {
+      describe(`tweak(${i}) xOnly(${tweaksXOnly[i]})`, function () {
+        if (i >= 0) {
+          it('tweaks a key', function () {
+            publicKey = musig.addTweaks(
+              publicKey.keyAggCache,
+              tweaks.slice(i, i + 1),
+              tweaksXOnly.slice(i, i + 1)
+            );
+          });
 
-        it('aggregates keys with all tweaks', async function () {
-          expect(
-            await musig.keyAgg(
-              signers.map(({ publicKey }) => publicKey),
-              {
-                tweaks: tweaks.slice(0, i + 1),
-                tweaksXOnly: tweaksXOnly.slice(0, i + 1),
-              }
-            )
-          ).toEqual(publicKey);
-        });
+          it('aggregates keys with all tweaks', async function () {
+            expect(
+              await musig.keyAgg(
+                signers.map(({ publicKey }) => publicKey),
+                {
+                  tweaks: tweaks.slice(0, i + 1),
+                  tweaksXOnly: tweaksXOnly.slice(0, i + 1),
+                }
+              )
+            ).toEqual(publicKey);
+          });
+        }
 
         it('makes nonces', async function () {
           for (let j = 0; j < signers.length; j++) {
