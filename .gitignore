@@ -1,5 +1,2 @@
-build/
 node_modules/
 coverage/
-/lib/**/*.js
-/lib/**/*.ts
