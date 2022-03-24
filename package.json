@@ -31,7 +31,7 @@
     "crypto": false
   },
   "dependencies": {
-    "tslint": "^6.1.3"
+    "@noble/secp256k1": "git+https://github.com/brandonblack/noble-secp256k1.git#bitgo"
   },
   "devDependencies": {
     "@noble/hashes": "~1.0.0",
@@ -45,6 +45,7 @@
     "prettier": "2.5.1",
     "rollup": "2.67.2",
     "ts-jest": "27.1.3",
+    "tslint": "^6.1.3",
     "typescript": "4.5.4"
   },
   "keywords": [
