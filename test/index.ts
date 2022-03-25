@@ -1,31 +1,87 @@
+import createHash from 'create-hash';
 import * as fc from 'fast-check';
-import { schnorr, utils } from '@noble/secp256k1';
-import * as musig from '..';
+import * as secp from '@noble/secp256k1';
+import { AggregatePublicKey, MuSigFactory, MuSigPartialSig } from '..';
+import * as baseCrypto from '../base_crypto';
 import * as vectors from './vectors.json';
 
 interface Signer {
-  privateKey: Uint8Array;
+  secretKey: Uint8Array;
   publicKey: Uint8Array;
-  noncePair?: { privateNonce?: Uint8Array; publicNonce: Uint8Array };
-  sig?: musig.MusigPartialSig;
+  noncePair?: { secretNonce?: Uint8Array; publicNonce: Uint8Array };
+  sig?: MuSigPartialSig;
 }
 
-const tweaks = new Array(5).fill(0).map(() => utils.randomPrivateKey());
+secp.utils.sha256Sync = (...messages: Uint8Array[]): Uint8Array => {
+  const sha256 = createHash('sha256');
+  for (const message of messages) sha256.update(message);
+  return sha256.digest();
+};
+
+const musig = MuSigFactory({
+  ...baseCrypto,
+  pointMultiply: (p: Uint8Array, s: Uint8Array, compress: boolean): Uint8Array | null => {
+    try {
+      return secp.utils.pointMultiply(p, s, compress);
+    } catch {
+      return null;
+    }
+  },
+  pointAdd: (a: Uint8Array, b: Uint8Array, compress: boolean): Uint8Array | null => {
+    try {
+      return secp.Point.fromHex(a).add(secp.Point.fromHex(b)).toRawBytes(compress);
+    } catch {
+      return null;
+    }
+  },
+  pointAddTweak: (p: Uint8Array, t: Uint8Array, compress: boolean): Uint8Array | null => {
+    try {
+      return secp.utils.pointAddScalar(p, t, compress);
+    } catch {
+      return null;
+    }
+  },
+  liftX: (p: Uint8Array): Uint8Array | null => {
+    try {
+      return secp.Point.fromHex(p).toRawBytes(false);
+    } catch {
+      return null;
+    }
+  },
+  pointCompress: (p: Uint8Array, compress: boolean): Uint8Array => {
+    return secp.Point.fromHex(p).toRawBytes(compress);
+  },
+  getPublicKey: (s: Uint8Array, compress: boolean): Uint8Array | null => {
+    try {
+      return secp.getPublicKey(s, compress);
+    } catch {
+      return null;
+    }
+  },
+  taggedHash: (tag: string, ...messages: Uint8Array[]): Uint8Array => {
+    return secp.utils.taggedHashSync(tag, ...messages);
+  },
+  sha256: (...messages: Uint8Array[]): Uint8Array => {
+    return secp.utils.sha256Sync!(...messages);
+  },
+});
+
+const tweaks = new Array(5).fill(0).map(() => secp.utils.randomPrivateKey());
 const tweaksXOnly = new Array(5).fill(0).map((_, i) => (tweaks[0][i] & 1) === 1);
 
 for (let nSigners = 1; nSigners < 5; nSigners++) {
   describe(`random musig(${nSigners})`, function () {
-    let publicKey: musig.MusigPublicKey;
+    let publicKey: AggregatePublicKey;
     let signers: Signer[] = [];
-    let message = utils.randomBytes();
+    let message = secp.utils.randomBytes();
     let aggNonce: Uint8Array;
     let sig: Uint8Array;
 
     beforeAll(function () {
       for (let i = 0; i < nSigners; i++) {
-        const privateKey = utils.randomPrivateKey();
-        const publicKey = schnorr.getPublicKey(privateKey);
-        signers.push({ privateKey, publicKey });
+        const secretKey = secp.utils.randomPrivateKey();
+        const publicKey = secp.schnorr.getPublicKey(secretKey);
+        signers.push({ secretKey, publicKey });
       }
     });
 
@@ -38,7 +94,7 @@ for (let nSigners = 1; nSigners < 5; nSigners++) {
         if (i >= 0) {
           it('tweaks a key', function () {
             publicKey = musig.addTweaks(
-              publicKey.keyAggCache,
+              publicKey.session,
               tweaks.slice(i, i + 1),
               tweaksXOnly.slice(i, i + 1)
             );
@@ -64,32 +120,32 @@ for (let nSigners = 1; nSigners < 5; nSigners++) {
               case 1:
                 const sessionId = new Uint8Array(32);
                 sessionId[31] = nSigners;
-                signer.noncePair = await musig.nonceGen(
+                signer.noncePair = await musig.nonceGen({
                   sessionId,
-                  signer.privateKey,
+                  secretKey: signer.secretKey,
                   message,
-                  publicKey.publicKey
-                );
+                  aggregatePublicKey: publicKey.publicKey,
+                });
                 break;
               case 2:
-                signer.noncePair = await musig.nonceGen(
-                  undefined,
-                  signer.privateKey,
+                signer.noncePair = await musig.nonceGen({
+                  sessionId: secp.utils.randomBytes(),
+                  secretKey: signer.secretKey,
                   message,
-                  publicKey.publicKey
-                );
+                  aggregatePublicKey: publicKey.publicKey,
+                });
                 break;
               case 3:
-                signer.noncePair = await musig.nonceGen(
-                  undefined,
-                  signer.privateKey,
+                signer.noncePair = await musig.nonceGen({
+                  sessionId: secp.utils.randomBytes(),
+                  secretKey: signer.secretKey,
                   message,
-                  publicKey.publicKey,
-                  utils.randomBytes()
-                );
+                  aggregatePublicKey: publicKey.publicKey,
+                  extraInput: secp.utils.randomBytes(),
+                });
                 break;
               default:
-                signer.noncePair = await musig.nonceGen();
+                signer.noncePair = await musig.nonceGen({ sessionId: secp.utils.randomBytes() });
                 break;
             }
           }
@@ -101,31 +157,31 @@ for (let nSigners = 1; nSigners < 5; nSigners++) {
 
         it('makes partial sigs', async function () {
           for (const signer of signers) {
-            signer.sig = await musig.partialSign(
+            signer.sig = await musig.partialSign({
               message,
-              signer.privateKey,
-              {
-                privateNonce: signer.noncePair!.privateNonce!,
+              secretKey: signer.secretKey,
+              nonce: {
+                secretNonce: signer.noncePair!.secretNonce!,
                 publicNonce: signer.noncePair!.publicNonce,
               },
               aggNonce,
-              publicKey.keyAggCache
-            );
-            delete signer.noncePair!.privateNonce;
+              session: publicKey.session
+            });
+            delete signer.noncePair!.secretNonce;
           }
         });
 
         it('verifies partial sigs', async function () {
           for (const signer of signers) {
             expect(
-              await musig.partialVerify(
-                signer.sig!.sig,
+              await musig.partialVerify({
+                sig: signer.sig!.sig,
                 message,
-                signer.publicKey,
-                signer.noncePair!.publicNonce,
+                publicKey: signer.publicKey,
+                publicNonce: signer.noncePair!.publicNonce,
                 aggNonce,
-                publicKey.keyAggCache
-              )
+                keyAggSession: publicKey.session
+              })
             ).toBeTruthy();
           }
         });
@@ -133,15 +189,15 @@ for (let nSigners = 1; nSigners < 5; nSigners++) {
         it('verifies partial sigs', async function () {
           for (const signer of signers) {
             expect(
-              await musig.partialVerify(
-                signer.sig!.sig,
+              await musig.partialVerify({
+                sig: signer.sig!.sig,
                 message,
-                signer.publicKey,
-                signer.noncePair!.publicNonce,
+                publicKey: signer.publicKey,
+                publicNonce: signer.noncePair!.publicNonce,
                 aggNonce,
-                publicKey.keyAggCache,
-                signer.sig!.session
-              )
+                keyAggSession: publicKey.session,
+                session: signer.sig!.session
+              })
             ).toBeTruthy();
           }
         });
@@ -154,71 +210,80 @@ for (let nSigners = 1; nSigners < 5; nSigners++) {
         });
 
         it('verifies sig', async function () {
-          expect(await schnorr.verify(sig, message, publicKey.publicKey)).toBe(true);
+          expect(await secp.schnorr.verify(sig, message, publicKey.publicKey)).toBe(true);
         });
       });
     }
   });
 }
 
+const basePublicKeys = vectors.publicKeys.map((pk) => Buffer.from(pk, 'hex'));
+
 describe('keyAgg vectors', function () {
   for (const [name, vector] of Object.entries(vectors.keyAggVectors)) {
     it(`aggregates keys ${name}`, async function () {
-      const publicKeys = vector.publicKeyIndices.map((i) => vectors.publicKeys[i]);
+      const publicKeys = vector.publicKeyIndices.map((i) => basePublicKeys[i]);
       const key = await musig.keyAgg(publicKeys, { sort: false });
       expect(Buffer.from(key.publicKey).toString('hex')).toBe(vector.expected);
-      const secondPublicKey = key.keyAggCache.slice((33 + 32) * 2, (33 + 32 + 32) * 2);
+      const secondPublicKeyX = Buffer.from(key.session.rest.subarray(65, 97)).toString('hex');
       if ('secondPublicKeyIndex' in vector) {
-        expect(secondPublicKey).toBe(publicKeys[vector.secondPublicKeyIndex]);
+        expect(secondPublicKeyX).toBe(publicKeys[vector.secondPublicKeyIndex].toString('hex'));
       } else {
-        expect(secondPublicKey).toBe(new Array(65).join('0'));
+        expect(secondPublicKeyX).toBe(new Buffer(32).toString('hex'));
       }
     });
   }
 });
 
 describe('nonceGen vectors', function () {
+  const nonceArgs = {
+    sessionId: Buffer.from(vectors.nonceArgs.sessionId, 'hex'),
+    secretKey: Buffer.from(vectors.nonceArgs.secretKey, 'hex'),
+    message: Buffer.from(vectors.nonceArgs.message, 'hex'),
+    aggregatePublicKey: Buffer.from(vectors.nonceArgs.aggregatePublicKey, 'hex'),
+    extraInput: Buffer.from(vectors.nonceArgs.extraInput, 'hex'),
+  };
   for (const [name, vector] of Object.entries(vectors.nonceVectors)) {
     it(`generates nonces ${name}`, async function () {
-      const args: Array<string | undefined> = [...vectors.nonceArgs];
-      vector.blankArgs.forEach((i) => (args[i] = undefined));
-      const nonce = await musig.nonceGen(...args);
-      expect(Buffer.from(nonce.privateNonce).toString('hex')).toBe(vector.expected);
+      const args = { ...nonceArgs }
+      vector.blankArgs.forEach((i) => (delete (args as Record<string, Uint8Array>)[i]));
+      const nonce = await musig.nonceGen(args);
+      expect(Buffer.from(nonce.secretNonce).toString('hex')).toBe(vector.expected);
     });
   }
 });
 
 describe('sign vectors', function () {
   for (const [name, vector] of Object.entries(vectors.signVectors)) {
-    const { msg, privateNonce, aggNonce, signingKey, nonSignerKeyIndices } = vectors.signData;
+    const { msg, secretNonce, aggNonce, signingKey, nonSignerKeyIndices } = vectors.signData;
     it(`partial signs ${name}`, async function () {
-      const publicKeys: Array<string | Uint8Array> = nonSignerKeyIndices.map(
-        (i) => vectors.publicKeys[i]
+      const publicKeys: Uint8Array[] = nonSignerKeyIndices.map(
+        (i) => basePublicKeys[i]
       );
-      const signingPublicKey = schnorr.getPublicKey(signingKey);
+      const signingPublicKey = secp.schnorr.getPublicKey(signingKey);
       publicKeys.splice(vector.signerIndex, 0, signingPublicKey);
 
-      let parity, keyAggCache;
+      let parity, keyAggSession;
       if ('tweak' in vector) {
-        ({ parity, keyAggCache } = await musig.keyAgg(publicKeys, {
-          tweaks: [vector.tweak],
+        ({ parity, session: keyAggSession } = await musig.keyAgg(publicKeys, {
+          tweaks: [Buffer.from(vector.tweak, 'hex')],
           tweaksXOnly: [vector.xOnlyTweak],
           sort: false,
         }));
       } else {
-        ({ parity, keyAggCache } = await musig.keyAgg(publicKeys, { sort: false }));
+        ({ parity, session: keyAggSession } = await musig.keyAgg(publicKeys, { sort: false }));
       }
       expect(parity).toBe(vector.expectedParity);
 
-      const { sig, session } = await musig.partialSign(
-        msg,
-        signingKey,
-        { privateNonce },
-        aggNonce,
-        keyAggCache
-      );
+      const { sig, session } = await musig.partialSign({
+        message: Buffer.from(msg, 'hex'),
+        secretKey: Buffer.from(signingKey, 'hex'),
+        nonce: { secretNonce: Buffer.from(secretNonce, 'hex') },
+        aggNonce: Buffer.from(aggNonce, 'hex'),
+        session: keyAggSession
+      });
       expect(Buffer.from(sig).toString('hex')).toBe(vector.expectedS);
-      expect(Buffer.from(session, 'hex')[0]).toBe(vector.expectedNonceParity);
+      expect(session[0]).toBe(vector.expectedNonceParity);
     });
   }
 });

@@ -1,5 +1,4 @@
 * Add a README
-* Extract necessary ECC operations to an interface
-* Do testing with tiny-secp (and possibly others
+* Do testing with tiny-secp256k1
 * Add failure case tests
 * Do more input validation

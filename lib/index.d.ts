@@ -1,11 +1,11 @@
 /*! musig-js - MIT License (c) 2022 Brandon Black */
 interface MuSig {
-    keyAgg(publicKeys: Uint8Array[], opts: {
+    keyAgg(publicKeys: Uint8Array[], opts?: {
         tweaks?: Uint8Array[];
         tweaksXOnly?: boolean[];
         sort?: boolean;
     }): AggregatePublicKey;
-    addTweaks(keyAggSession: KeyAggSession, tweaks: Uint8Array[], tweaksXOnly?: boolean[]): AggregatePublicKey;
+    addTweaks(session: KeyAggSession, tweaks: Uint8Array[], tweaksXOnly?: boolean[]): AggregatePublicKey;
     nonceGen({ sessionId, secretKey, message, aggregatePublicKey, extraInput, }: {
         sessionId: Uint8Array;
         secretKey?: Uint8Array;
@@ -41,11 +41,11 @@ interface MuSig {
     signAgg(sigs: Uint8Array[], session: Uint8Array): Uint8Array;
 }
 interface Crypto {
-    pointAddTweak(p: Uint8Array, t: Uint8Array, compressed?: boolean): Uint8Array;
-    pointAdd(a: Uint8Array, b: Uint8Array, compressed?: boolean): Uint8Array;
-    pointMultiply(p: Uint8Array, a: Uint8Array, compressed?: boolean): Uint8Array;
-    pointNegate(p: Uint8Array, compressed?: boolean): Uint8Array;
-    pointCompress(p: Uint8Array, compressed?: boolean): Uint8Array;
+    pointAddTweak(p: Uint8Array, t: Uint8Array, compressed: boolean): Uint8Array | null;
+    pointAdd(a: Uint8Array, b: Uint8Array, compressed: boolean): Uint8Array | null;
+    pointMultiply(p: Uint8Array, a: Uint8Array, compressed: boolean): Uint8Array | null;
+    pointNegate(p: Uint8Array): Uint8Array;
+    pointCompress(p: Uint8Array, compressed: boolean): Uint8Array;
     secretAdd(a: Uint8Array, b: Uint8Array): Uint8Array;
     secretMultiply(a: Uint8Array, b: Uint8Array): Uint8Array;
     secretNegate(a: Uint8Array): Uint8Array;
@@ -54,7 +54,9 @@ interface Crypto {
     isPoint(p: Uint8Array): boolean;
     isXOnlyPoint(p: Uint8Array): boolean;
     liftX(p: Uint8Array): Uint8Array | null;
-    getPublicKey(s: Uint8Array, compressed?: boolean): Uint8Array;
+    pointX(p: Uint8Array): Uint8Array;
+    hasEvenY(p: Uint8Array): boolean;
+    getPublicKey(s: Uint8Array, compressed: boolean): Uint8Array | null;
     taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array;
     sha256(...messages: Uint8Array[]): Uint8Array;
 }

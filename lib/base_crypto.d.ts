@@ -1,0 +1,10 @@
+export declare function isPoint(p: Uint8Array): boolean;
+export declare function isXOnlyPoint(p: Uint8Array): boolean;
+export declare function secretAdd(a: Uint8Array, b: Uint8Array): Uint8Array;
+export declare function secretMultiply(a: Uint8Array, b: Uint8Array): Uint8Array;
+export declare function secretNegate(a: Uint8Array): Uint8Array;
+export declare function secretMod(a: Uint8Array): Uint8Array;
+export declare function isSecret(s: Uint8Array): boolean;
+export declare function pointNegate(p: Uint8Array): Uint8Array;
+export declare function pointX(p: Uint8Array): Uint8Array;
+export declare function hasEvenY(p: Uint8Array): boolean;

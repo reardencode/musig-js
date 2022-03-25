@@ -1,6 +1,5 @@
 /*! musig-js - MIT License (c) 2022 Brandon Black */
 // https://github.com/ElementsProject/secp256k1-zkp/blob/master/doc/musig-spec.mediawiki
-import { Buffer as NBuffer } from 'buffer';
 
 const TAGS = {
   challenge: 'BIP0340/challenge',
@@ -14,7 +13,7 @@ interface MuSig {
   // X-only keys in
   keyAgg(
     publicKeys: Uint8Array[],
-    opts: {
+    opts?: {
       tweaks?: Uint8Array[];
       tweaksXOnly?: boolean[];
       sort?: boolean;
@@ -22,7 +21,7 @@ interface MuSig {
   ): AggregatePublicKey;
 
   addTweaks(
-    keyAggSession: KeyAggSession,
+    session: KeyAggSession,
     tweaks: Uint8Array[],
     tweaksXOnly?: boolean[]
   ): AggregatePublicKey;
@@ -85,9 +84,10 @@ interface Crypto {
    * @param p A point, compressed or uncompressed
    * @param t A tweak, 0 < t < n
    * @param compressed Whether the resulting point should be compressed.
-   * @returns The tweaked point, compressed or uncompressed.
+   * @returns The tweaked point, compressed or uncompressed, null if the result
+   * is the point at infinity.
    */
-  pointAddTweak(p: Uint8Array, t: Uint8Array, compressed?: boolean): Uint8Array;
+  pointAddTweak(p: Uint8Array, t: Uint8Array, compressed: boolean): Uint8Array | null;
 
   /**
    * Adds two points.
@@ -95,9 +95,10 @@ interface Crypto {
    * @param a An addend point, compressed or uncompressed
    * @param b An addend point, compressed or uncompressed
    * @param compressed Whether the resulting point should be compressed.
-   * @returns The sum point, compressed or uncompressed.
+   * @returns The sum point, compressed or uncompressed, null if the result is
+   * the point at infinity.
    */
-  pointAdd(a: Uint8Array, b: Uint8Array, compressed?: boolean): Uint8Array;
+  pointAdd(a: Uint8Array, b: Uint8Array, compressed: boolean): Uint8Array | null;
 
   /**
    * Multiplies a point by a scalar.
@@ -105,18 +106,18 @@ interface Crypto {
    * @param p A point multiplicand, compressed or uncompressed
    * @param a The multiplier, 0 < a < n
    * @param compressed Whether the resulting point should be compressed.
-   * @returns The product point, compressed or uncompressed.
+   * @returns The product point, compressed or uncompressed, null if the result
+   * is the point at infinity.
    */
-  pointMultiply(p: Uint8Array, a: Uint8Array, compressed?: boolean): Uint8Array;
+  pointMultiply(p: Uint8Array, a: Uint8Array, compressed: boolean): Uint8Array | null;
 
   /**
    * Negates a point, ie. returns the point with the opposite parity.
    *
    * @param p A point to negate, compressed or uncompressed
-   * @param compressed Whether the resulting point should be compressed.
-   * @returns The negated point, compressed or uncompressed.
+   * @returns The negated point, with same compression as input.
    */
-  pointNegate(p: Uint8Array, compressed?: boolean): Uint8Array;
+  pointNegate(p: Uint8Array): Uint8Array;
 
   /**
    * Negates a point, ie. returns the point with the opposite parity.
@@ -125,7 +126,7 @@ interface Crypto {
    * @param compressed Whether the resulting point should be compressed.
    * @returns The point, compressed or uncompressed.
    */
-  pointCompress(p: Uint8Array, compressed?: boolean): Uint8Array;
+  pointCompress(p: Uint8Array, compressed: boolean): Uint8Array;
 
   /**
    * Adds one value to another, mod n.
@@ -186,13 +187,25 @@ interface Crypto {
   liftX(p: Uint8Array): Uint8Array | null;
 
   /**
+   * @param p x-only, compressed or uncompressed
+   * @returns the x coordinate of p
+   */
+  pointX(p: Uint8Array): Uint8Array;
+
+  /**
+   * @param p a point, compressed or uncompressed
+   * @returns true if p has an even y coordinate, false otherwise
+   */
+  hasEvenY(p: Uint8Array): boolean;
+
+  /**
    * Gets a public key for secret key.
    *
    * @param s Secret key
    * @param compressed Whether the resulting point should be compressed.
    * @returns The public key, compressed or uncompressed
    */
-  getPublicKey(s: Uint8Array, compressed?: boolean): Uint8Array;
+  getPublicKey(s: Uint8Array, compressed: boolean): Uint8Array | null;
 
   /**
    * Performs a BIP340-style tagged hash.
@@ -212,35 +225,7 @@ interface Crypto {
   sha256(...messages: Uint8Array[]): Uint8Array;
 }
 
-const U8A0 = NBuffer.from(
-  '0000000000000000000000000000000000000000000000000000000000000000',
-  'hex'
-);
-const U8A1 = NBuffer.from(
-  '0000000000000000000000000000000000000000000000000000000000000001',
-  'hex'
-);
-
-/**
- * @param p x-only, compressed or uncompressed
- * @returns the x coordinate of p
- */
-function pointX(p: Uint8Array): Uint8Array {
-  if (p.length === 32) return p;
-  if (p.length === 33) return p.subarray(1);
-  if (p.length === 65) return p.subarray(1, 33);
-  throw new Error('Wrong length to be a point');
-}
-
-/**
- * @param p a point, compressed or uncompressed
- * @returns true if p has an even y coordinate, false otherwise
- */
-function hasEvenY(p: Uint8Array): boolean {
-  if (p.length === 33) return p[0] % 2 === 0;
-  if (p.length === 65) return p[32] % 2 === 0;
-  throw new Error('Wrong length to be a point');
-}
+const U8A0 = new Uint8Array(32);
 
 /**
  * Compares two Uint8Arrays in byte order.
@@ -248,8 +233,8 @@ function hasEvenY(p: Uint8Array): boolean {
  */
 function compare32b(a: Uint8Array, b: Uint8Array): number {
   if (a.length !== 32 || b.length !== 32) throw new Error('Can only compare 32 byte arrays');
-  const aD = new DataView(a.buffer);
-  const bD = new DataView(b.buffer);
+  const aD = new DataView(a.buffer, a.byteOffset, a.length);
+  const bD = new DataView(b.buffer, b.byteOffset, b.length);
   for (let i = 0; i < 8; i++) {
     const cmp = aD.getUint32(i * 4) - bD.getUint32(i * 4);
     if (cmp !== 0) return cmp;
@@ -325,27 +310,34 @@ export function MuSigFactory(ecc: Crypto): MuSig {
 
       const shiftedPublicKeys = publicKeys.map((pk, i) => {
         const coef = cache.coefficient(pk);
-        if (coef === U8A1) return evenPublicKeys[i];
-        return ecc.pointMultiply(evenPublicKeys[i], coef);
+        if (coef === undefined) return evenPublicKeys[i];
+        const spk = ecc.pointMultiply(evenPublicKeys[i], coef, false);
+        if (!spk) throw new Error('Point at infinity during aggregation')
+        return spk;
       });
 
-      const publicKey = shiftedPublicKeys.reduce((a, b) => ecc.pointAdd(a, b));
+      let publicKey: Uint8Array | null = shiftedPublicKeys[0];
+      for (let i = 1; i < shiftedPublicKeys.length; i++) {
+        publicKey = ecc.pointAdd(publicKey, shiftedPublicKeys[i], false);
+        if (!publicKey) throw new Error('Point at infinty during aggregation');
+      }
       return cache.copyWith(publicKey);
     }
 
     assertValidity(): void {
       if (
+        this.publicKey.length !== 65 ||
         !ecc.isPoint(this.publicKey) ||
         this.publicKeyHash.length !== 32 ||
         (compare32b(this.secondPublicKeyX, U8A0) !== 0 &&
           !ecc.isXOnlyPoint(this.secondPublicKeyX)) ||
-        (this.tweak !== U8A0 && !ecc.isSecret(this.tweak))
+        (compare32b(this.tweak, U8A0) !== 0 && !ecc.isSecret(this.tweak))
       )
         throw new Error('Invalid KeyAggCache');
     }
 
-    coefficient(publicKey: Uint8Array): Uint8Array {
-      if (compare32b(publicKey, this.secondPublicKeyX) === 0) return U8A1;
+    coefficient(publicKey: Uint8Array): Uint8Array | undefined {
+      if (compare32b(publicKey, this.secondPublicKeyX) === 0) return undefined;
       const key = Buffer.from(publicKey).toString('hex');
       let coef = this._coefCache.get(key);
       if (coef === undefined) {
@@ -359,17 +351,17 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       if (tweaksXOnly === undefined) tweaksXOnly = new Array(tweaks.length).fill(false);
       if (tweaks.length !== tweaksXOnly.length)
         throw new Error('tweaks and tweaksXOnly have different lengths');
-      let publicKey: Uint8Array | undefined = this.publicKey;
+      let publicKey: Uint8Array | null = this.publicKey;
       let parity = this.parity;
       let tweak = this.tweak;
 
       for (let i = 0; i < tweaks.length; i++) {
-        if (!hasEvenY(publicKey) && tweaksXOnly[i]) {
+        if (!ecc.hasEvenY(publicKey) && tweaksXOnly[i]) {
           parity = !parity;
           tweak = ecc.secretNegate(tweak);
           publicKey = ecc.pointNegate(publicKey); // -1 * Q[v-1]
         }
-        publicKey = ecc.pointAddTweak(publicKey, tweaks[i]); // +/-Q + tG
+        publicKey = ecc.pointAddTweak(publicKey, tweaks[i], false); // +/-Q + tG
         if (!publicKey) throw new Error('Tweak failed');
         tweak = ecc.secretAdd(tweak, tweaks[i]);
       }
@@ -378,15 +370,12 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     }
 
     dump(): KeyAggSession {
-      return {
-        base: this.publicKeyHash,
-        rest: NBuffer.concat([
-          this.secondPublicKeyX,
-          this.publicKey,
-          Uint8Array.of(this.parity ? 1 : 0),
-          this.tweak,
-        ]),
-      };
+      const rest = new Uint8Array(130);
+      rest.set(this.publicKey, 0);
+      rest.set(this.secondPublicKeyX, 65);
+      rest[97] = this.parity ? 1 : 0;
+      rest.set(this.tweak, 98);
+      return { base: this.publicKeyHash, rest };
     }
     static load(session: KeyAggSession): KeyAggCache {
       // 32, and 65+32+1+32
@@ -396,10 +385,10 @@ export function MuSigFactory(ecc: Crypto): MuSig {
         );
       const cache = new KeyAggCache(
         session.base,
-        session.rest.slice(0, 65),
-        session.rest.slice(65, 97),
+        session.rest.subarray(65, 97),
+        session.rest.subarray(0, 65),
         session.rest[97] === 0x01,
-        session.rest.slice(98, 130),
+        session.rest.subarray(98, 130),
         _coefCache.get(session.base)
       );
       cache.assertValidity();
@@ -407,8 +396,8 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     }
     toAggregatePublicKey(): AggregatePublicKey {
       return {
-        parity: hasEvenY(this.publicKey) ? 0 : 1,
-        publicKey: pointX(this.publicKey),
+        parity: ecc.hasEvenY(this.publicKey) ? 0 : 1,
+        publicKey: ecc.pointX(this.publicKey),
         session: this.dump(),
       };
     }
@@ -429,10 +418,10 @@ export function MuSigFactory(ecc: Crypto): MuSig {
         throw new TypeError(`expected 97 or 129 bytes, not ${session.length}`);
       return new ProcessedNonce(
         session[0] === 1,
-        session.slice(1, 33),
-        session.slice(33, 65),
-        session.slice(65, 97),
-        session.slice(97)
+        session.subarray(1, 33),
+        session.subarray(33, 65),
+        session.subarray(65, 97),
+        session.subarray(97)
       );
     }
     assertValidity(): void {
@@ -440,18 +429,18 @@ export function MuSigFactory(ecc: Crypto): MuSig {
         !ecc.isXOnlyPoint(this.finalNonceX) ||
         !ecc.isSecret(this.coefficient) ||
         !ecc.isSecret(this.challenge) ||
-        (compare32b(U8A0, this.sPart) !== 0 && !ecc.isSecret(this.sPart))
+        (compare32b(this.sPart, U8A0) !== 0 && !ecc.isSecret(this.sPart))
       )
         throw new Error('Invalid ProcessedNonce');
     }
     dump(): Uint8Array {
-      return NBuffer.concat([
-        Uint8Array.of(this.finalNonceHasOddY ? 1 : 0),
-        this.finalNonceX,
-        this.coefficient,
-        this.challenge,
-        this.sPart,
-      ]);
+      const session = new Uint8Array(129);
+      session[0] = this.finalNonceHasOddY ? 1 : 0;
+      session.set(this.finalNonceX, 1);
+      session.set(this.coefficient, 33);
+      session.set(this.challenge, 65);
+      session.set(this.sPart, 97);
+      return session;
     }
   }
 
@@ -461,244 +450,282 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     return [Uint8Array.of(32), p];
   }
 
-  // See https://github.com/ElementsProject/secp256k1-zkp/blob/8fd97d8/include/secp256k1_musig.h#L326
-  // TODO: Should we do more to prevent nonce reuse?
-  function nonceGen({
-    sessionId,
-    secretKey,
-    message,
-    aggregatePublicKey,
-    extraInput,
-  }: {
-    sessionId: Uint8Array;
-    secretKey?: Uint8Array;
-    message?: Uint8Array;
-    aggregatePublicKey?: Uint8Array;
-    extraInput?: Uint8Array;
-  }): { secretNonce: Uint8Array; publicNonce: Uint8Array } {
-    const messages: Uint8Array[] = [];
-    messages.push(sessionId);
-    messages.push(...normalizeNonceArg(secretKey));
-    messages.push(...normalizeNonceArg(message));
-    messages.push(...normalizeNonceArg(aggregatePublicKey));
-    messages.push(...normalizeNonceArg(extraInput));
-    const seed = ecc.taggedHash(TAGS.musig_nonce, ...messages);
-    const secretNonce = new Uint8Array(64);
-    const publicNonce = new Uint8Array(66);
-    for (let i = 0; i < 2; i++) {
-      const k = ecc.sha256(seed, Uint8Array.of(i));
-      secretNonce.set(k, i * 32);
-      publicNonce.set(ecc.getPublicKey(k), i * 33);
-    }
-    return { secretNonce, publicNonce };
-  }
-
-  function nonceAgg(nonces: Uint8Array[]): Uint8Array {
-    const noncePoints = nonces.map((nonce) => [nonce.subarray(0, 33), nonce.subarray(33)]);
-    const aggNonces = noncePoints.reduce((prev, cur) => [
-      ecc.pointAdd(prev[0], cur[0], false),
-      ecc.pointAdd(prev[1], cur[1], false),
-    ]);
-    return Buffer.concat(aggNonces.map((nonce) => ecc.pointCompress(nonce, true)));
-  }
-
   function nonceProcess(
     aggNonce: Uint8Array,
     message: Uint8Array,
     cache: KeyAggCache
   ): ProcessedNonce {
-    const pubKeyX = pointX(cache.publicKey);
+    const pubKeyX = ecc.pointX(cache.publicKey);
 
     const coefficient = ecc.taggedHash(TAGS.musig_noncecoef, aggNonce, pubKeyX, message);
 
     const aggNonces = [aggNonce.subarray(0, 33), aggNonce.subarray(33)];
-    const finalNonce = ecc.pointAdd(
-      aggNonces[0],
-      ecc.pointMultiply(aggNonces[1], coefficient, false),
-      false
-    );
+    const bK2 = ecc.pointMultiply(aggNonces[1], coefficient, false);
+    if (!bK2) throw new Error('Nonce part at infinity');
+    const finalNonce = ecc.pointAdd(aggNonces[0], bK2, false);
     if (!finalNonce) throw new Error('Unexpected final nonce at infinity');
 
-    const finalNonceX = pointX(finalNonce);
+    const finalNonceX = ecc.pointX(finalNonce);
     const challenge = ecc.secretMod(ecc.taggedHash(TAGS.challenge, finalNonceX, pubKeyX, message));
 
     let sPart: Uint8Array = U8A0;
     if (compare32b(cache.tweak, U8A0) !== 0) {
       sPart = ecc.secretMultiply(challenge, cache.tweak);
-      if (!hasEvenY(cache.publicKey)) {
+      if (!ecc.hasEvenY(cache.publicKey)) {
         sPart = ecc.secretNegate(sPart);
       }
     }
 
-    return new ProcessedNonce(!hasEvenY(finalNonce), finalNonceX, coefficient, challenge, sPart);
+    return new ProcessedNonce(!ecc.hasEvenY(finalNonce), finalNonceX, coefficient, challenge, sPart);
   }
 
   function partialVerifyInner({
     sig,
-    publicKey,
-    publicNonce,
+    publicKeyX,
+    publicNonces,
     cache,
     processedNonce,
   }: {
     sig: Uint8Array;
-    publicKey: Uint8Array;
-    publicNonce: Uint8Array | [Uint8Array, Uint8Array];
+    publicKeyX: Uint8Array;
+    publicNonces: [Uint8Array, Uint8Array];
     cache: KeyAggCache;
     processedNonce: ProcessedNonce;
   }): boolean {
-    const publicNonces = Array.isArray(publicNonce)
-      ? publicNonce
-      : [publicNonce.subarray(0, 33), publicNonce.subarray(33)];
-
-    let rj = ecc.pointAdd(
-      publicNonces[0],
-      ecc.pointMultiply(publicNonces[1], processedNonce.coefficient, false),
-      false
-    );
+    const bK2 = ecc.pointMultiply(publicNonces[1], processedNonce.coefficient, false);
+    if (!bK2) throw new Error('Nonce part at infinity');
+    let rj = ecc.pointAdd(publicNonces[0], bK2, false);
     if (!rj) throw new Error('Unexpected public nonce at infinity');
-    if (processedNonce.finalNonceHasOddY) {
-      rj = ecc.pointNegate(rj);
-    }
+    if (processedNonce.finalNonceHasOddY) rj = ecc.pointNegate(rj);
 
+    let publicKey = ecc.liftX(publicKeyX);
+    if (!publicKey) throw new Error('Invalid verification key');
     // negative of the implementation in libsecp256k1-zkp due to a different but
     // algebraically identical verification equation used for convenience
-    if (hasEvenY(cache.publicKey) === cache.parity) {
+    if (ecc.hasEvenY(cache.publicKey) === cache.parity) {
       publicKey = ecc.pointNegate(publicKey);
     }
 
-    const a = cache.coefficient(publicKey);
-    const ea = ecc.secretMultiply(processedNonce.challenge, a);
+    const a = cache.coefficient(ecc.pointX(publicKey));
+    const ea =
+      a === undefined ? processedNonce.challenge : ecc.secretMultiply(processedNonce.challenge, a);
 
-    const ver = ecc.pointAdd(rj, ecc.pointMultiply(publicKey, ea, false), true);
+    const eaP = ecc.pointMultiply(publicKey, ea, false);
+    if (!eaP) return false;
+    const ver = ecc.pointAdd(rj, eaP, true);
     if (!ver) return false;
     const sG = ecc.getPublicKey(sig, true);
-    return ver[0] === sG[0] && compare32b(ver.slice(1), sG.slice(1)) === 0;
+    if (!sG) return false;
+    return ver[0] === sG[0] && compare32b(ver.subarray(1), sG.subarray(1)) === 0;
   }
 
-  function partialSign({
+  function partialSignInner({
     message,
     secretKey,
-    nonce,
-    aggNonce,
-    session,
+    publicKey,
+    secretNonces,
+    cache,
+    processedNonce,
   }: {
     message: Uint8Array;
     secretKey: Uint8Array;
-    nonce: Nonce;
-    aggNonce: Uint8Array;
-    session: KeyAggSession;
-  }): { sig: Uint8Array; session: Uint8Array } {
-    const cache = KeyAggCache.load(session);
-    const processedNonce = nonceProcess(aggNonce, message, cache);
-    const secretNonces = [nonce.secretNonce.slice(0, 32), nonce.secretNonce.slice(32)];
-    // Do this before we (potentially) modify the private nonces.
-    const publicNonce: Uint8Array | [Uint8Array, Uint8Array] = nonce.publicNonce || [
-      ecc.getPublicKey(secretNonces[0], false),
-      ecc.getPublicKey(secretNonces[1], false),
-    ];
-
-    if (processedNonce.finalNonceHasOddY) {
-      for (let i = 0; i < secretNonces.length; i++) {
-        secretNonces[i] = ecc.secretNegate(secretNonces[i]);
-      }
-    }
-
-    const publicKey = ecc.getPublicKey(secretKey, false);
-    const a = cache.coefficient(pointX(publicKey));
+    publicKey: Uint8Array;
+    secretNonces: [Uint8Array, Uint8Array];
+    cache: KeyAggCache;
+    processedNonce: ProcessedNonce;
+  }): Uint8Array {
+    const bk2 = ecc.secretMultiply(processedNonce.coefficient, secretNonces[1]);
+    let k1bk2 = ecc.secretAdd(secretNonces[0], bk2);
+    if (processedNonce.finalNonceHasOddY) k1bk2 = ecc.secretNegate(k1bk2);
 
     // double-negative of the implementation in libsecp256k1-zkp
-    if ((hasEvenY(publicKey) !== cache.parity) !== hasEvenY(cache.publicKey)) {
+    if ((ecc.hasEvenY(publicKey) !== cache.parity) !== ecc.hasEvenY(cache.publicKey)) {
       secretKey = ecc.secretNegate(secretKey);
     }
-    const ad = ecc.secretMultiply(a, secretKey);
-    const ead = ecc.secretMultiply(processedNonce.challenge, ad);
-    const bk2 = ecc.secretMultiply(processedNonce.coefficient, secretNonces[1]);
-    const sig = ecc.secretAdd(ead, ecc.secretAdd(secretNonces[0], bk2));
 
-    const verificationKey = pointX(publicKey);
-    const valid = partialVerifyInner({
-      sig,
-      publicKey: verificationKey,
-      publicNonce,
-      cache,
-      processedNonce,
-    });
-    if (!valid) throw new Error('Partial signature failed verification');
+    const a = cache.coefficient(ecc.pointX(publicKey));
+    const ea =
+      a === undefined ? processedNonce.challenge : ecc.secretMultiply(processedNonce.challenge, a);
 
-    return { sig, session: processedNonce.dump() };
-  }
+    const ead = ecc.secretMultiply(ea, secretKey);
+    const sig = ecc.secretAdd(ead, k1bk2);
 
-  function partialVerify({
-    sig,
-    message,
-    publicKey,
-    publicNonce,
-    aggNonce,
-    keyAggSession,
-    session,
-  }: {
-    sig: Uint8Array;
-    message: Uint8Array;
-    publicKey: Uint8Array;
-    publicNonce: Uint8Array;
-    aggNonce: Uint8Array;
-    keyAggSession: KeyAggSession;
-    session?: Uint8Array;
-  }): false | { session: Uint8Array } {
-    const cache = KeyAggCache.load(keyAggSession);
-    const processedNonce = session
-      ? ProcessedNonce.load(session)
-      : nonceProcess(aggNonce, message, cache);
-
-    const valid = partialVerifyInner({
-      sig,
-      publicKey: pointX(publicKey),
-      publicNonce,
-      cache,
-      processedNonce,
-    });
-    return valid && { session: processedNonce.dump() };
-  }
-
-  // X-only keys in
-  function keyAgg(
-    publicKeys: Uint8Array[],
-    opts: {
-      tweaks?: Uint8Array[];
-      tweaksXOnly?: boolean[];
-      sort?: boolean;
-    } = {}
-  ): AggregatePublicKey {
-    let cache = KeyAggCache.fromPublicKeys(publicKeys, opts.sort);
-    if (opts.tweaks !== undefined) cache = cache.addTweaks(opts.tweaks, opts.tweaksXOnly);
-    return cache.toAggregatePublicKey();
-  }
-
-  function addTweaks(
-    keyAggSession: KeyAggSession,
-    tweaks: Uint8Array[],
-    tweaksXOnly?: boolean[]
-  ): AggregatePublicKey {
-    let cache = KeyAggCache.load(keyAggSession);
-    cache = cache.addTweaks(tweaks, tweaksXOnly);
-    return cache.toAggregatePublicKey();
-  }
-
-  function signAgg(sigs: Uint8Array[], session: Uint8Array): Uint8Array {
-    const processedNonce = ProcessedNonce.load(session);
-    return NBuffer.concat([
-      processedNonce.finalNonceX,
-      sigs.reduce((prev, cur) => ecc.secretAdd(prev, cur), processedNonce.sPart),
-    ]);
+    return sig;
   }
 
   return {
-    keyAgg,
-    addTweaks,
-    nonceGen,
-    nonceAgg,
-    partialSign,
-    partialVerify,
-    signAgg,
+    keyAgg: (
+      publicKeys: Uint8Array[],
+      opts: {
+        tweaks?: Uint8Array[];
+        tweaksXOnly?: boolean[];
+        sort?: boolean;
+      } = {}
+    ): AggregatePublicKey => {
+      let cache = KeyAggCache.fromPublicKeys(publicKeys, opts.sort);
+      if (opts.tweaks !== undefined) cache = cache.addTweaks(opts.tweaks, opts.tweaksXOnly);
+      return cache.toAggregatePublicKey();
+    },
+
+    addTweaks: (
+      session: KeyAggSession,
+      tweaks: Uint8Array[],
+      tweaksXOnly?: boolean[]
+    ): AggregatePublicKey => {
+      let cache = KeyAggCache.load(session);
+      cache = cache.addTweaks(tweaks, tweaksXOnly);
+      return cache.toAggregatePublicKey();
+    },
+
+    // See https://github.com/ElementsProject/secp256k1-zkp/blob/8fd97d8/include/secp256k1_musig.h#L326
+    // TODO: Should we do more to prevent nonce reuse?
+    nonceGen: ({
+      sessionId,
+      secretKey,
+      message,
+      aggregatePublicKey,
+      extraInput,
+    }: {
+      sessionId: Uint8Array;
+      secretKey?: Uint8Array;
+      message?: Uint8Array;
+      aggregatePublicKey?: Uint8Array;
+      extraInput?: Uint8Array;
+    }): { secretNonce: Uint8Array; publicNonce: Uint8Array } => {
+      const seed = ecc.taggedHash(
+        TAGS.musig_nonce,
+        ...[
+          sessionId,
+          ...normalizeNonceArg(secretKey),
+          ...normalizeNonceArg(message),
+          ...normalizeNonceArg(aggregatePublicKey),
+          ...normalizeNonceArg(extraInput),
+        ]
+      );
+      const secretNonce = new Uint8Array(64);
+      const publicNonce = new Uint8Array(66);
+      for (let i = 0; i < 2; i++) {
+        const kH = ecc.sha256(seed, Uint8Array.of(i));
+        const k = ecc.secretMod(kH);
+        secretNonce.set(k, i * 32);
+        const pub = ecc.getPublicKey(k, true);
+        if (!pub) throw new Error('Secret nonce has no corresponding public nonce');
+        publicNonce.set(pub, i * 33);
+      }
+      return { secretNonce, publicNonce };
+    },
+
+    nonceAgg: (nonces: Uint8Array[]): Uint8Array => {
+      let aggNonces = [nonces[0].subarray(0, 33), nonces[0].subarray(33)];
+      for (let i = 1; i < nonces.length; i++) {
+        const K1 = ecc.pointAdd(aggNonces[0], nonces[i].subarray(0, 33), false);
+        if (!K1) throw new Error('Agg nonce part at infinity');
+        const K2 = ecc.pointAdd(aggNonces[1], nonces[i].subarray(33), false);
+        if (!K2) throw new Error('Agg nonce part at infinity');
+        aggNonces = [K1, K2];
+      }
+      const aggNonce = new Uint8Array(66);
+      aggNonce.set(ecc.pointCompress(aggNonces[0], true), 0);
+      aggNonce.set(ecc.pointCompress(aggNonces[1], true), 33);
+      return aggNonce;
+    },
+
+    partialSign: ({
+      message,
+      secretKey,
+      nonce,
+      aggNonce,
+      session,
+    }: {
+      message: Uint8Array;
+      secretKey: Uint8Array;
+      nonce: Nonce;
+      aggNonce: Uint8Array;
+      session: KeyAggSession;
+    }): { sig: Uint8Array; session: Uint8Array } => {
+      const publicKey = ecc.getPublicKey(secretKey, false);
+      if (!publicKey) throw new Error('Invalid secret key, no corresponding public key');
+      const secretNonces: [Uint8Array, Uint8Array] = [
+        nonce.secretNonce.subarray(0, 32),
+        nonce.secretNonce.subarray(32),
+      ];
+      const cache = KeyAggCache.load(session);
+      const processedNonce = nonceProcess(aggNonce, message, cache);
+      const sig = partialSignInner({
+        message,
+        secretKey,
+        publicKey,
+        secretNonces,
+        cache,
+        processedNonce,
+      });
+
+      let publicNonces: [Uint8Array, Uint8Array];
+      if (nonce.publicNonce) {
+        publicNonces = [nonce.publicNonce.subarray(0, 33), nonce.publicNonce.subarray(33)]
+      } else {
+        const pn1 = ecc.getPublicKey(secretNonces[0], false);
+        const pn2 = ecc.getPublicKey(secretNonces[1], false);
+        if (!pn1 || !pn2) throw new Error('Invalid secret nonce, no corresponding public nonce');
+        publicNonces = [pn1, pn2];
+      }
+      const valid = partialVerifyInner({
+        sig,
+        publicKeyX: ecc.pointX(publicKey),
+        publicNonces,
+        cache,
+        processedNonce,
+      });
+      if (!valid) throw new Error('Partial signature failed verification');
+      return { sig, session: processedNonce.dump() };
+    },
+
+    partialVerify: ({
+      sig,
+      message,
+      publicKey,
+      publicNonce,
+      aggNonce,
+      keyAggSession,
+      session,
+    }: {
+      sig: Uint8Array;
+      message: Uint8Array;
+      publicKey: Uint8Array;
+      publicNonce: Uint8Array;
+      aggNonce: Uint8Array;
+      keyAggSession: KeyAggSession;
+      session?: Uint8Array;
+    }): false | { session: Uint8Array } => {
+      const publicNonces: [Uint8Array, Uint8Array] = [
+        publicNonce.subarray(0, 33),
+        publicNonce.subarray(33),
+      ];
+
+      const cache = KeyAggCache.load(keyAggSession);
+      const processedNonce = session
+        ? ProcessedNonce.load(session)
+        : nonceProcess(aggNonce, message, cache);
+
+      const valid = partialVerifyInner({
+        sig,
+        publicKeyX: publicKey,
+        publicNonces,
+        cache,
+        processedNonce,
+      });
+      return valid && { session: processedNonce.dump() };
+    },
+
+    signAgg: (sigs: Uint8Array[], session: Uint8Array): Uint8Array => {
+      const processedNonce = ProcessedNonce.load(session);
+      const sig = new Uint8Array(64);
+      sig.set(processedNonce.finalNonceX, 0);
+      sig.set(
+        sigs.reduce((prev, cur) => ecc.secretAdd(prev, cur), processedNonce.sPart),
+        32
+      );
+      return sig;
+    },
   };
 }

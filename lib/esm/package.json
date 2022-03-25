@@ -2,8 +2,5 @@
   "type": "module",
   "browser": {
     "crypto": false
-  },
-  "dependencies": {
-    "@noble/secp256k1": "git+https://github.com/brandonblack/noble-secp256k1#601438008aa532334cf403948850d56966f34f36"
   }
 }
