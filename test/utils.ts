@@ -5,7 +5,17 @@ import * as baseCrypto from '../base_crypto';
 
 export const tinyCrypto = {
   ...baseCrypto,
-  pointMultiply: tiny.pointMultiply,
+  pointMultiplyUnsafe: tiny.pointMultiply,
+  pointMultiplyAndAddUnsafe: (
+    p1: Uint8Array,
+    a: Uint8Array,
+    p2: Uint8Array,
+    compress: boolean
+  ): Uint8Array | null => {
+    const p1a = tiny.pointMultiply(p1, a, false);
+    if (p1a === null) return null;
+    return tiny.pointAdd(p1a, p2, compress);
+  },
   pointAdd: tiny.pointAdd,
   pointAddTweak: tiny.pointAddScalar,
   liftX: (p: Uint8Array): Uint8Array | null => {
@@ -28,9 +38,34 @@ noble.utils.sha256Sync = tinyCrypto.sha256;
 
 export const nobleCrypto = {
   ...baseCrypto,
-  pointMultiply: (p: Uint8Array, s: Uint8Array, compress: boolean): Uint8Array | null => {
+  pointMultiplyUnsafe: (p: Uint8Array, a: Uint8Array, compress: boolean): Uint8Array | null => {
     try {
-      return noble.utils.pointMultiply(p, s, compress);
+      const product = noble.Point.fromHex(p).multiplyAndAddUnsafe(
+        noble.Point.ZERO,
+        BigInt(`0x${Buffer.from(a).toString('hex')}`),
+        BigInt(1)
+      );
+      if (!product) return null;
+      return product.toRawBytes(compress);
+    } catch {
+      return null;
+    }
+  },
+  pointMultiplyAndAddUnsafe: (
+    p1: Uint8Array,
+    a: Uint8Array,
+    p2: Uint8Array,
+    compress: boolean
+  ): Uint8Array | null => {
+    try {
+      const p2p = noble.Point.fromHex(p2);
+      const p = noble.Point.fromHex(p1).multiplyAndAddUnsafe(
+        p2p,
+        BigInt(`0x${Buffer.from(a).toString('hex')}`),
+        BigInt(1)
+      );
+      if (!p) return null;
+      return p.toRawBytes(compress);
     } catch {
       return null;
     }

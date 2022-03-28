@@ -1,5 +1,5 @@
 /*! musig-js - MIT License (c) 2022 Brandon Black */
-interface MuSig {
+export interface MuSig {
     keyAgg(publicKeys: Uint8Array[], opts?: {
         tweaks?: Uint8Array[];
         tweaksXOnly?: boolean[];
@@ -17,12 +17,15 @@ interface MuSig {
         publicNonce: Uint8Array;
     };
     nonceAgg(nonces: Uint8Array[]): Uint8Array;
-    partialSign({ msg, secretKey, nonce, aggNonce, keyAggSession, }: {
+    createSigningSession(aggNonce: Uint8Array, msg: Uint8Array, keyAggSession: KeyAggSession): Uint8Array;
+    partialSign({ msg, secretKey, nonce, aggNonce, keyAggSession, signingSession, verify, }: {
         msg: Uint8Array;
         secretKey: Uint8Array;
         nonce: Nonce;
         aggNonce: Uint8Array;
         keyAggSession: KeyAggSession;
+        signingSession?: Uint8Array;
+        verify?: boolean;
     }): MuSigPartialSig;
     partialVerify({ sig, msg, publicKey, publicNonce, aggNonce, keyAggSession, signingSession, }: {
         sig: Uint8Array;
@@ -38,7 +41,8 @@ interface MuSig {
 export interface Crypto {
     pointAddTweak(p: Uint8Array, t: Uint8Array, compressed: boolean): Uint8Array | null;
     pointAdd(a: Uint8Array, b: Uint8Array, compressed: boolean): Uint8Array | null;
-    pointMultiply(p: Uint8Array, a: Uint8Array, compressed: boolean): Uint8Array | null;
+    pointMultiplyUnsafe(p: Uint8Array, a: Uint8Array, compressed: boolean): Uint8Array | null;
+    pointMultiplyAndAddUnsafe(p1: Uint8Array, a: Uint8Array, p2: Uint8Array, compressed: boolean): Uint8Array | null;
     pointNegate(p: Uint8Array): Uint8Array;
     pointCompress(p: Uint8Array, compressed: boolean): Uint8Array;
     secretAdd(a: Uint8Array, b: Uint8Array): Uint8Array;
@@ -73,4 +77,3 @@ export interface MuSigPartialSig {
     signingSession: Uint8Array;
 }
 export declare function MuSigFactory(ecc: Crypto): MuSig;
-export {};

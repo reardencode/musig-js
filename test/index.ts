@@ -179,7 +179,9 @@ for (const { cryptoName, crypto } of cryptos)
           const publicKeys = vector.publicKeyIndices.map((i) => basePublicKeys[i]);
           const key = await musig.keyAgg(publicKeys, { sort: false });
           expect(Buffer.from(key.publicKey).toString('hex')).toBe(vector.expected);
-          const secondPublicKeyX = Buffer.from(key.keyAggSession.rest.subarray(65, 97)).toString('hex');
+          const secondPublicKeyX = Buffer.from(key.keyAggSession.rest.subarray(65, 97)).toString(
+            'hex'
+          );
           if ('secondPublicKeyIndex' in vector) {
             expect(secondPublicKeyX).toBe(publicKeys[vector.secondPublicKeyIndex].toString('hex'));
           } else {
@@ -203,6 +205,16 @@ for (const { cryptoName, crypto } of cryptos)
           vector.blankArgs.forEach((i) => delete (args as Record<string, Uint8Array>)[i]);
           const nonce = await musig.nonceGen(args);
           expect(Buffer.from(nonce.secretNonce).toString('hex')).toBe(vector.expected);
+        });
+      }
+    });
+
+    describe('nonceAgg vectors', function () {
+      for (const [name, vector] of Object.entries(vectors.nonceAggVectors)) {
+        it(`aggregatesNonces ${name}`, function () {
+          const nonces = vector.publicNonces.map((nonce) => Buffer.from(nonce, 'hex'));
+          const aggNonce = musig.nonceAgg(nonces);
+          expect(Buffer.from(aggNonce).toString('hex')).toBe(vector.expected);
         });
       }
     });
@@ -235,7 +247,9 @@ for (const { cryptoName, crypto } of cryptos)
             keyAggSession,
           });
           expect(Buffer.from(sig).toString('hex')).toBe(vector.expectedS);
-          expect(signingSession[0]).toBe(vector.expectedNonceParity);
+          expect(crypto.hasEvenY(signingSession.slice(0, 65)) ? 0 : 1).toBe(
+            vector.expectedNonceParity
+          );
         });
       }
     });
