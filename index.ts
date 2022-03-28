@@ -21,7 +21,7 @@ interface MuSig {
   ): AggregatePublicKey;
 
   addTweaks(
-    session: KeyAggSession,
+    keyAggSession: KeyAggSession,
     tweaks: Uint8Array[],
     tweaksXOnly?: boolean[]
   ): AggregatePublicKey;
@@ -29,13 +29,13 @@ interface MuSig {
   nonceGen({
     sessionId,
     secretKey,
-    message,
+    msg,
     aggregatePublicKey,
     extraInput,
   }: {
     sessionId: Uint8Array;
     secretKey?: Uint8Array;
-    message?: Uint8Array;
+    msg?: Uint8Array;
     aggregatePublicKey?: Uint8Array;
     extraInput?: Uint8Array;
   }): { secretNonce: Uint8Array; publicNonce: Uint8Array };
@@ -43,41 +43,41 @@ interface MuSig {
   nonceAgg(nonces: Uint8Array[]): Uint8Array;
 
   partialSign({
-    message,
+    msg,
     secretKey,
     nonce,
     aggNonce,
-    session,
+    keyAggSession,
   }: {
-    message: Uint8Array;
+    msg: Uint8Array;
     secretKey: Uint8Array;
     nonce: Nonce;
     aggNonce: Uint8Array;
-    session: KeyAggSession;
-  }): { sig: Uint8Array; session: Uint8Array };
+    keyAggSession: KeyAggSession;
+  }): MuSigPartialSig;
 
   partialVerify({
     sig,
-    message,
+    msg,
     publicKey,
     publicNonce,
     aggNonce,
     keyAggSession,
-    session,
+    signingSession,
   }: {
     sig: Uint8Array;
-    message: Uint8Array;
+    msg: Uint8Array;
     publicKey: Uint8Array;
     publicNonce: Uint8Array;
     aggNonce: Uint8Array;
     keyAggSession: KeyAggSession;
-    session?: Uint8Array;
-  }): false | { session: Uint8Array };
+    signingSession?: Uint8Array;
+  }): false | MuSigPartialSig;
 
-  signAgg(sigs: Uint8Array[], session: Uint8Array): Uint8Array;
+  signAgg(sigs: Uint8Array[], signingSession: Uint8Array): Uint8Array;
 }
 
-interface Crypto {
+export interface Crypto {
   /**
    * Adds a tweak to a point.
    *
@@ -255,12 +255,12 @@ export interface KeyAggSession {
 export interface AggregatePublicKey {
   parity: 0 | 1;
   publicKey: Uint8Array; // 32 bytes
-  session: KeyAggSession;
+  keyAggSession: KeyAggSession;
 }
 
 export interface MuSigPartialSig {
   sig: Uint8Array;
-  session: Uint8Array;
+  signingSession: Uint8Array;
 }
 
 // MuSig2 per
@@ -312,7 +312,7 @@ export function MuSigFactory(ecc: Crypto): MuSig {
         const coef = cache.coefficient(pk);
         if (coef === undefined) return evenPublicKeys[i];
         const spk = ecc.pointMultiply(evenPublicKeys[i], coef, false);
-        if (!spk) throw new Error('Point at infinity during aggregation')
+        if (!spk) throw new Error('Point at infinity during aggregation');
         return spk;
       });
 
@@ -398,7 +398,7 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       return {
         parity: ecc.hasEvenY(this.publicKey) ? 0 : 1,
         publicKey: ecc.pointX(this.publicKey),
-        session: this.dump(),
+        keyAggSession: this.dump(),
       };
     }
   }
@@ -450,14 +450,10 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     return [Uint8Array.of(32), p];
   }
 
-  function nonceProcess(
-    aggNonce: Uint8Array,
-    message: Uint8Array,
-    cache: KeyAggCache
-  ): ProcessedNonce {
+  function nonceProcess(aggNonce: Uint8Array, msg: Uint8Array, cache: KeyAggCache): ProcessedNonce {
     const pubKeyX = ecc.pointX(cache.publicKey);
 
-    const coefficient = ecc.taggedHash(TAGS.musig_noncecoef, aggNonce, pubKeyX, message);
+    const coefficient = ecc.taggedHash(TAGS.musig_noncecoef, aggNonce, pubKeyX, msg);
 
     const aggNonces = [aggNonce.subarray(0, 33), aggNonce.subarray(33)];
     const bK2 = ecc.pointMultiply(aggNonces[1], coefficient, false);
@@ -466,7 +462,7 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     if (!finalNonce) throw new Error('Unexpected final nonce at infinity');
 
     const finalNonceX = ecc.pointX(finalNonce);
-    const challenge = ecc.secretMod(ecc.taggedHash(TAGS.challenge, finalNonceX, pubKeyX, message));
+    const challenge = ecc.secretMod(ecc.taggedHash(TAGS.challenge, finalNonceX, pubKeyX, msg));
 
     let sPart: Uint8Array = U8A0;
     if (compare32b(cache.tweak, U8A0) !== 0) {
@@ -476,7 +472,13 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       }
     }
 
-    return new ProcessedNonce(!ecc.hasEvenY(finalNonce), finalNonceX, coefficient, challenge, sPart);
+    return new ProcessedNonce(
+      !ecc.hasEvenY(finalNonce),
+      finalNonceX,
+      coefficient,
+      challenge,
+      sPart
+    );
   }
 
   function partialVerifyInner({
@@ -520,14 +522,14 @@ export function MuSigFactory(ecc: Crypto): MuSig {
   }
 
   function partialSignInner({
-    message,
+    msg,
     secretKey,
     publicKey,
     secretNonces,
     cache,
     processedNonce,
   }: {
-    message: Uint8Array;
+    msg: Uint8Array;
     secretKey: Uint8Array;
     publicKey: Uint8Array;
     secretNonces: [Uint8Array, Uint8Array];
@@ -568,11 +570,11 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     },
 
     addTweaks: (
-      session: KeyAggSession,
+      keyAggSession: KeyAggSession,
       tweaks: Uint8Array[],
       tweaksXOnly?: boolean[]
     ): AggregatePublicKey => {
-      let cache = KeyAggCache.load(session);
+      let cache = KeyAggCache.load(keyAggSession);
       cache = cache.addTweaks(tweaks, tweaksXOnly);
       return cache.toAggregatePublicKey();
     },
@@ -582,13 +584,13 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     nonceGen: ({
       sessionId,
       secretKey,
-      message,
+      msg,
       aggregatePublicKey,
       extraInput,
     }: {
       sessionId: Uint8Array;
       secretKey?: Uint8Array;
-      message?: Uint8Array;
+      msg?: Uint8Array;
       aggregatePublicKey?: Uint8Array;
       extraInput?: Uint8Array;
     }): { secretNonce: Uint8Array; publicNonce: Uint8Array } => {
@@ -597,7 +599,7 @@ export function MuSigFactory(ecc: Crypto): MuSig {
         ...[
           sessionId,
           ...normalizeNonceArg(secretKey),
-          ...normalizeNonceArg(message),
+          ...normalizeNonceArg(msg),
           ...normalizeNonceArg(aggregatePublicKey),
           ...normalizeNonceArg(extraInput),
         ]
@@ -631,28 +633,28 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     },
 
     partialSign: ({
-      message,
+      msg,
       secretKey,
       nonce,
       aggNonce,
-      session,
+      keyAggSession,
     }: {
-      message: Uint8Array;
+      msg: Uint8Array;
       secretKey: Uint8Array;
       nonce: Nonce;
       aggNonce: Uint8Array;
-      session: KeyAggSession;
-    }): { sig: Uint8Array; session: Uint8Array } => {
+      keyAggSession: KeyAggSession;
+    }): MuSigPartialSig => {
       const publicKey = ecc.getPublicKey(secretKey, false);
       if (!publicKey) throw new Error('Invalid secret key, no corresponding public key');
       const secretNonces: [Uint8Array, Uint8Array] = [
         nonce.secretNonce.subarray(0, 32),
         nonce.secretNonce.subarray(32),
       ];
-      const cache = KeyAggCache.load(session);
-      const processedNonce = nonceProcess(aggNonce, message, cache);
+      const cache = KeyAggCache.load(keyAggSession);
+      const processedNonce = nonceProcess(aggNonce, msg, cache);
       const sig = partialSignInner({
-        message,
+        msg,
         secretKey,
         publicKey,
         secretNonces,
@@ -662,7 +664,7 @@ export function MuSigFactory(ecc: Crypto): MuSig {
 
       let publicNonces: [Uint8Array, Uint8Array];
       if (nonce.publicNonce) {
-        publicNonces = [nonce.publicNonce.subarray(0, 33), nonce.publicNonce.subarray(33)]
+        publicNonces = [nonce.publicNonce.subarray(0, 33), nonce.publicNonce.subarray(33)];
       } else {
         const pn1 = ecc.getPublicKey(secretNonces[0], false);
         const pn2 = ecc.getPublicKey(secretNonces[1], false);
@@ -677,35 +679,35 @@ export function MuSigFactory(ecc: Crypto): MuSig {
         processedNonce,
       });
       if (!valid) throw new Error('Partial signature failed verification');
-      return { sig, session: processedNonce.dump() };
+      return { sig, signingSession: processedNonce.dump() };
     },
 
     partialVerify: ({
       sig,
-      message,
+      msg,
       publicKey,
       publicNonce,
       aggNonce,
       keyAggSession,
-      session,
+      signingSession,
     }: {
       sig: Uint8Array;
-      message: Uint8Array;
+      msg: Uint8Array;
       publicKey: Uint8Array;
       publicNonce: Uint8Array;
       aggNonce: Uint8Array;
       keyAggSession: KeyAggSession;
-      session?: Uint8Array;
-    }): false | { session: Uint8Array } => {
+      signingSession?: Uint8Array;
+    }): false | MuSigPartialSig => {
       const publicNonces: [Uint8Array, Uint8Array] = [
         publicNonce.subarray(0, 33),
         publicNonce.subarray(33),
       ];
 
       const cache = KeyAggCache.load(keyAggSession);
-      const processedNonce = session
-        ? ProcessedNonce.load(session)
-        : nonceProcess(aggNonce, message, cache);
+      const processedNonce = signingSession
+        ? ProcessedNonce.load(signingSession)
+        : nonceProcess(aggNonce, msg, cache);
 
       const valid = partialVerifyInner({
         sig,
@@ -714,11 +716,11 @@ export function MuSigFactory(ecc: Crypto): MuSig {
         cache,
         processedNonce,
       });
-      return valid && { session: processedNonce.dump() };
+      return valid && { sig, signingSession: processedNonce.dump() };
     },
 
-    signAgg: (sigs: Uint8Array[], session: Uint8Array): Uint8Array => {
-      const processedNonce = ProcessedNonce.load(session);
+    signAgg: (sigs: Uint8Array[], signingSession: Uint8Array): Uint8Array => {
+      const processedNonce = ProcessedNonce.load(signingSession);
       const sig = new Uint8Array(64);
       sig.set(processedNonce.finalNonceX, 0);
       sig.set(

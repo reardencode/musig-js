@@ -18,7 +18,7 @@ const CURVE = {
   b: BigInt(7),
   P: BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F'),
   n: BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141'),
-}
+};
 
 // Big Endian
 function read32b(bytes: Uint8Array): bigint {
@@ -170,4 +170,3 @@ export function hasEvenY(p: Uint8Array): boolean {
   if (p.length === 65) return p[64] % 2 === 0;
   throw new Error('Wrong length to be a point');
 }
-

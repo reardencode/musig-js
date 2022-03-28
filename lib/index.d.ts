@@ -5,11 +5,11 @@ interface MuSig {
         tweaksXOnly?: boolean[];
         sort?: boolean;
     }): AggregatePublicKey;
-    addTweaks(session: KeyAggSession, tweaks: Uint8Array[], tweaksXOnly?: boolean[]): AggregatePublicKey;
-    nonceGen({ sessionId, secretKey, message, aggregatePublicKey, extraInput, }: {
+    addTweaks(keyAggSession: KeyAggSession, tweaks: Uint8Array[], tweaksXOnly?: boolean[]): AggregatePublicKey;
+    nonceGen({ sessionId, secretKey, msg, aggregatePublicKey, extraInput, }: {
         sessionId: Uint8Array;
         secretKey?: Uint8Array;
-        message?: Uint8Array;
+        msg?: Uint8Array;
         aggregatePublicKey?: Uint8Array;
         extraInput?: Uint8Array;
     }): {
@@ -17,30 +17,25 @@ interface MuSig {
         publicNonce: Uint8Array;
     };
     nonceAgg(nonces: Uint8Array[]): Uint8Array;
-    partialSign({ message, secretKey, nonce, aggNonce, session, }: {
-        message: Uint8Array;
+    partialSign({ msg, secretKey, nonce, aggNonce, keyAggSession, }: {
+        msg: Uint8Array;
         secretKey: Uint8Array;
         nonce: Nonce;
         aggNonce: Uint8Array;
-        session: KeyAggSession;
-    }): {
+        keyAggSession: KeyAggSession;
+    }): MuSigPartialSig;
+    partialVerify({ sig, msg, publicKey, publicNonce, aggNonce, keyAggSession, signingSession, }: {
         sig: Uint8Array;
-        session: Uint8Array;
-    };
-    partialVerify({ sig, message, publicKey, publicNonce, aggNonce, keyAggSession, session, }: {
-        sig: Uint8Array;
-        message: Uint8Array;
+        msg: Uint8Array;
         publicKey: Uint8Array;
         publicNonce: Uint8Array;
         aggNonce: Uint8Array;
         keyAggSession: KeyAggSession;
-        session?: Uint8Array;
-    }): false | {
-        session: Uint8Array;
-    };
-    signAgg(sigs: Uint8Array[], session: Uint8Array): Uint8Array;
+        signingSession?: Uint8Array;
+    }): false | MuSigPartialSig;
+    signAgg(sigs: Uint8Array[], signingSession: Uint8Array): Uint8Array;
 }
-interface Crypto {
+export interface Crypto {
     pointAddTweak(p: Uint8Array, t: Uint8Array, compressed: boolean): Uint8Array | null;
     pointAdd(a: Uint8Array, b: Uint8Array, compressed: boolean): Uint8Array | null;
     pointMultiply(p: Uint8Array, a: Uint8Array, compressed: boolean): Uint8Array | null;
@@ -71,11 +66,11 @@ export interface KeyAggSession {
 export interface AggregatePublicKey {
     parity: 0 | 1;
     publicKey: Uint8Array;
-    session: KeyAggSession;
+    keyAggSession: KeyAggSession;
 }
 export interface MuSigPartialSig {
     sig: Uint8Array;
-    session: Uint8Array;
+    signingSession: Uint8Array;
 }
 export declare function MuSigFactory(ecc: Crypto): MuSig;
 export {};
