@@ -14,8 +14,7 @@ then requires ECMAScript 2020 BigInt.
 
 ```shell
 npm i
-npm run build
-npm run test
+npm run test # runs build
 npm run bench
 ```
 
