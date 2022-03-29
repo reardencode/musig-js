@@ -75,7 +75,11 @@
       "import": "./lib/esm/index.js",
       "default": "./lib/index.js"
     },
-    "./index.d.ts": "./lib/index.d.ts"
+    "./index.d.ts": "./lib/index.d.ts",
+    "./base_crypto": {
+      "import": "./lib/esm/base_crypto.js",
+      "default": "./lib/base_crypto.js"
+    }
   },
   "jest": {
     "testRegex": "/test/(?!utils|benchmark).*?\\.ts",
