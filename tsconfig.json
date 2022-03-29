@@ -11,8 +11,8 @@
     "preserveConstEnums": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "baseUrl": ".",
+    "baseUrl": "."
   },
-  "include": ["*.ts"],
+  "include": ["index.ts", "base_crypto.ts"],
   "exclude": ["node_modules", "lib"]
 }
