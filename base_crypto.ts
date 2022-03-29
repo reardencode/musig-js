@@ -22,6 +22,7 @@ const CURVE = {
 
 // Big Endian
 function read32b(bytes: Uint8Array): bigint {
+  if (bytes.length !== 32) throw new Error(`Expected 32-bytes, not ${bytes.length}`);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
   let b = view.getBigUint64(0);
   for (let offs = 8; offs < bytes.length; offs += 8) {
@@ -32,7 +33,7 @@ function read32b(bytes: Uint8Array): bigint {
 }
 
 function write32b(num: bigint): Uint8Array {
-  if (num > MAX_INT) throw new Error('Expected 32-byte number');
+  if (num < _0n || num > MAX_INT) throw new Error('Expected positive 32-byte number');
   const result = new Uint8Array(32);
   const view = new DataView(result.buffer, result.byteOffset, result.length);
   for (let offs = 24; offs >= 0; offs -= 8) {
@@ -40,6 +41,12 @@ function write32b(num: bigint): Uint8Array {
     num >>= _64n;
   }
   return result;
+}
+
+function readSecret(bytes: Uint8Array): bigint {
+  const a = read32b(bytes);
+  if (a >= CURVE.n) throw new Error('Expected value mod n');
+  return a;
 }
 
 // The short Weierstrass form curve equation simplifes to y^2 = x^3 + 7.
@@ -107,40 +114,32 @@ export function isXOnlyPoint(p: Uint8Array): boolean {
 }
 
 export function secretAdd(a: Uint8Array, b: Uint8Array): Uint8Array {
-  if (a.length !== 32 || b.length !== 32) throw new Error('Expected 32-byte values');
-  const aN = read32b(a);
-  const bN = read32b(b);
-  if (aN >= CURVE.n || bN >= CURVE.n) throw new Error('Expected values mod n');
+  const aN = readSecret(a);
+  const bN = readSecret(b);
   const sum = (aN + bN) % CURVE.n;
   return write32b(sum);
 }
 
 export function secretMultiply(a: Uint8Array, b: Uint8Array): Uint8Array {
-  if (a.length !== 32 || b.length !== 32) throw new Error('Expected 32-byte values');
-  const aN = read32b(a);
-  const bN = read32b(b);
-  if (aN >= CURVE.n || bN >= CURVE.n) throw new Error('Expected values mod n');
+  const aN = readSecret(a);
+  const bN = readSecret(b);
   const product = (aN * bN) % CURVE.n;
   return write32b(product);
 }
 
 export function secretNegate(a: Uint8Array): Uint8Array {
-  if (a.length !== 32) throw new Error('Expected 32-byte value');
-  const aN = read32b(a);
-  if (aN >= CURVE.n) throw new Error('Expected value mod n');
-  const negated = aN === _0n ? aN : CURVE.n - aN;
+  const aN = readSecret(a);
+  const negated = aN === _0n ? _0n : CURVE.n - aN;
   return write32b(negated);
 }
 
 export function secretMod(a: Uint8Array): Uint8Array {
-  if (a.length !== 32) throw new Error('Expected 32-byte value');
   const aN = read32b(a);
   const remainder = aN % CURVE.n;
   return write32b(remainder);
 }
 
 export function isSecret(s: Uint8Array): boolean {
-  if (s.length !== 32) throw new Error('Expected 32-byte value');
   const sN = read32b(s);
   return sN < CURVE.n;
 }
@@ -151,6 +150,7 @@ export function pointNegate(p: Uint8Array): Uint8Array {
     negated[0] = p[0] === 2 ? 3 : 2;
   } else if (p.length === 65) {
     const y = read32b(p.subarray(33));
+    if (y >= CURVE.P) throw new Error('Expected Y coordinate mod P');
     const minusY = CURVE.P - y;
     negated.set(write32b(minusY), 33);
   } else {
@@ -161,7 +161,7 @@ export function pointNegate(p: Uint8Array): Uint8Array {
 
 export function pointX(p: Uint8Array): Uint8Array {
   if (p.length === 32) return p;
-  if (p.length === 33 || p.length == 65) return p.subarray(1, 33);
+  if (p.length === 33 || p.length == 65) return p.slice(1, 33);
   throw new Error('Wrong length to be a point');
 }
 
