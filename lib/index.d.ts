@@ -44,7 +44,7 @@ export interface Crypto {
     pointMultiplyUnsafe(p: Uint8Array, a: Uint8Array, compressed: boolean): Uint8Array | null;
     pointMultiplyAndAddUnsafe(p1: Uint8Array, a: Uint8Array, p2: Uint8Array, compressed: boolean): Uint8Array | null;
     pointNegate(p: Uint8Array): Uint8Array;
-    pointCompress(p: Uint8Array, compressed: boolean): Uint8Array;
+    pointCompress(p: Uint8Array): Uint8Array;
     secretAdd(a: Uint8Array, b: Uint8Array): Uint8Array;
     secretMultiply(a: Uint8Array, b: Uint8Array): Uint8Array;
     secretNegate(a: Uint8Array): Uint8Array;

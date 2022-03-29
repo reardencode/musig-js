@@ -24,7 +24,6 @@ export const tinyCrypto = {
     pC.set(p, 1);
     return tiny.pointCompress(pC, false);
   },
-  pointCompress: tiny.pointCompress,
   getPublicKey: tiny.pointFromScalar,
   taggedHash: noble.utils.taggedHashSync,
   sha256: (...messages: Uint8Array[]): Uint8Array => {
@@ -90,9 +89,6 @@ export const nobleCrypto = {
     } catch {
       return null;
     }
-  },
-  pointCompress: (p: Uint8Array, compress: boolean): Uint8Array => {
-    return noble.Point.fromHex(p).toRawBytes(compress);
   },
   getPublicKey: (s: Uint8Array, compress: boolean): Uint8Array | null => {
     try {

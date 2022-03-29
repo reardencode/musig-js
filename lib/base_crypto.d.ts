@@ -8,3 +8,4 @@ export declare function isSecret(s: Uint8Array): boolean;
 export declare function pointNegate(p: Uint8Array): Uint8Array;
 export declare function pointX(p: Uint8Array): Uint8Array;
 export declare function hasEvenY(p: Uint8Array): boolean;
+export declare function pointCompress(p: Uint8Array): Uint8Array;

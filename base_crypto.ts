@@ -170,3 +170,12 @@ export function hasEvenY(p: Uint8Array): boolean {
   if (p.length === 65) return p[64] % 2 === 0;
   throw new Error('Wrong length to be a point');
 }
+
+export function pointCompress(p: Uint8Array): Uint8Array {
+  if (p.length === 33) return p;
+  if (p.length !== 65) throw new Error('Wrong length to be a point');
+  const compressed = new Uint8Array(33);
+  compressed.set(p.subarray(1, 33), 1);
+  compressed[0] = hasEvenY(p) ? 2 : 3;
+  return compressed;
+}

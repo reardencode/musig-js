@@ -232,13 +232,12 @@ export interface Crypto {
   pointNegate(p: Uint8Array): Uint8Array;
 
   /**
-   * Negates a point, ie. returns the point with the opposite parity.
+   * Compresses a point.
    *
-   * @param p A point format, compressed or uncompressed
-   * @param compressed Whether the resulting point should be compressed.
-   * @returns The point, compressed or uncompressed.
+   * @param p A point, compressed or uncompressed
+   * @returns The point, compressed.
    */
-  pointCompress(p: Uint8Array, compressed: boolean): Uint8Array;
+  pointCompress(p: Uint8Array): Uint8Array;
 
   /**
    * Adds one value to another, mod n.
@@ -742,8 +741,8 @@ export function MuSigFactory(ecc: Crypto): MuSig {
         aggNonces = [K1, K2];
       }
       const aggNonce = new Uint8Array(66);
-      aggNonce.set(ecc.pointCompress(aggNonces[0], true), 0);
-      aggNonce.set(ecc.pointCompress(aggNonces[1], true), 33);
+      aggNonce.set(ecc.pointCompress(aggNonces[0]), 0);
+      aggNonce.set(ecc.pointCompress(aggNonces[1]), 33);
       return aggNonce;
     },
 
