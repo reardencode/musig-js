@@ -7,7 +7,7 @@ interface Signer {
   secretKey: Uint8Array;
   publicKey: Uint8Array;
   noncePair?: { secretNonce?: Uint8Array; publicNonce: Uint8Array };
-  sig?: MuSigPartialSig;
+  sig?: Uint8Array;
 }
 
 const tweaks = new Array(5).fill(0).map(() => noble.utils.randomPrivateKey());
@@ -27,6 +27,7 @@ for (const { cryptoName, crypto } of cryptos)
         let signers: Signer[] = [];
         let msg = noble.utils.randomBytes();
         let aggNonce: Uint8Array;
+        let signingSession: Uint8Array;
         let sig: Uint8Array;
 
         beforeAll(function () {
@@ -37,8 +38,8 @@ for (const { cryptoName, crypto } of cryptos)
           }
         });
 
-        it('aggregates keys', async function () {
-          aggregatePublicKey = await musig.keyAgg(signers.map(({ publicKey }) => publicKey));
+        it('aggregates keys', function () {
+          aggregatePublicKey = musig.keyAgg(signers.map(({ publicKey }) => publicKey));
         });
 
         for (let i = -1; i < tweaks.length; i++) {
@@ -52,9 +53,9 @@ for (const { cryptoName, crypto } of cryptos)
                 );
               });
 
-              it('aggregates keys with all tweaks', async function () {
+              it('aggregates keys with all tweaks', function () {
                 expect(
-                  await musig.keyAgg(
+                  musig.keyAgg(
                     signers.map(({ publicKey }) => publicKey),
                     {
                       tweaks: tweaks.slice(0, i + 1),
@@ -65,14 +66,14 @@ for (const { cryptoName, crypto } of cryptos)
               });
             }
 
-            it('makes nonces', async function () {
+            it('makes nonces', function () {
               for (let j = 0; j < signers.length; j++) {
                 const signer = signers[j];
                 switch (j) {
                   case 1:
                     const sessionId = new Uint8Array(32);
                     sessionId[31] = nSigners;
-                    signer.noncePair = await musig.nonceGen({
+                    signer.noncePair = musig.nonceGen({
                       sessionId,
                       secretKey: signer.secretKey,
                       msg,
@@ -80,7 +81,7 @@ for (const { cryptoName, crypto } of cryptos)
                     });
                     break;
                   case 2:
-                    signer.noncePair = await musig.nonceGen({
+                    signer.noncePair = musig.nonceGen({
                       sessionId: noble.utils.randomBytes(),
                       secretKey: signer.secretKey,
                       msg,
@@ -88,7 +89,7 @@ for (const { cryptoName, crypto } of cryptos)
                     });
                     break;
                   case 3:
-                    signer.noncePair = await musig.nonceGen({
+                    signer.noncePair = musig.nonceGen({
                       sessionId: noble.utils.randomBytes(),
                       secretKey: signer.secretKey,
                       msg,
@@ -97,7 +98,7 @@ for (const { cryptoName, crypto } of cryptos)
                     });
                     break;
                   default:
-                    signer.noncePair = await musig.nonceGen({
+                    signer.noncePair = musig.nonceGen({
                       sessionId: noble.utils.randomBytes(),
                     });
                     break;
@@ -109,9 +110,17 @@ for (const { cryptoName, crypto } of cryptos)
               aggNonce = musig.nonceAgg(signers.map(({ noncePair }) => noncePair!.publicNonce));
             });
 
-            it('makes partial sigs', async function () {
+            it('creates a signing sesion', function () {
+              signingSession = musig.createSigningSession(
+                aggNonce,
+                msg,
+                aggregatePublicKey.keyAggSession
+              );
+            });
+
+            it('makes partial sigs', function () {
               for (const signer of signers) {
-                signer.sig = await musig.partialSign({
+                const { sig, signingSession: sigSigningSession } = musig.partialSign({
                   msg,
                   secretKey: signer.secretKey,
                   nonce: {
@@ -121,36 +130,38 @@ for (const { cryptoName, crypto } of cryptos)
                   aggNonce,
                   keyAggSession: aggregatePublicKey.keyAggSession,
                 });
+                signer.sig = sig;
+                expect(Buffer.from(sigSigningSession)).toEqual(Buffer.from(signingSession));
                 delete signer.noncePair!.secretNonce;
               }
             });
 
-            it('verifies partial sigs', async function () {
+            it('verifies partial sigs', function () {
               for (const signer of signers) {
-                expect(
-                  await musig.partialVerify({
-                    sig: signer.sig!.sig,
-                    msg,
-                    publicKey: signer.publicKey,
-                    publicNonce: signer.noncePair!.publicNonce,
-                    aggNonce,
-                    keyAggSession: aggregatePublicKey.keyAggSession,
-                  })
-                ).toBeTruthy();
+                const result = musig.partialVerify({
+                  sig: signer.sig!,
+                  msg,
+                  publicKey: signer.publicKey,
+                  publicNonce: signer.noncePair!.publicNonce,
+                  aggNonce,
+                  keyAggSession: aggregatePublicKey.keyAggSession,
+                });
+                if (!result) throw new Error('Expected result to be truthy');
+                expect(Buffer.from(result.signingSession)).toEqual(Buffer.from(signingSession));
               }
             });
 
-            it('verifies partial sigs', async function () {
+            it('verifies partial sigs w/session', function () {
               for (const signer of signers) {
                 expect(
-                  await musig.partialVerify({
-                    sig: signer.sig!.sig,
+                  musig.partialVerify({
+                    sig: signer.sig!,
                     msg,
                     publicKey: signer.publicKey,
                     publicNonce: signer.noncePair!.publicNonce,
                     aggNonce,
                     keyAggSession: aggregatePublicKey.keyAggSession,
-                    signingSession: signer.sig!.signingSession,
+                    signingSession,
                   })
                 ).toBeTruthy();
               }
@@ -158,13 +169,13 @@ for (const { cryptoName, crypto } of cryptos)
 
             it('aggregates sigs', function () {
               sig = musig.signAgg(
-                signers.map(({ sig }) => sig!.sig),
-                signers[0].sig!.signingSession
+                signers.map(({ sig }) => sig!),
+                signingSession
               );
             });
 
-            it('verifies sig', async function () {
-              expect(await noble.schnorr.verify(sig, msg, aggregatePublicKey.publicKey)).toBe(true);
+            it('verifies sig', function () {
+              expect(noble.schnorr.verifySync(sig, msg, aggregatePublicKey.publicKey)).toBe(true);
             });
           });
         }
@@ -174,9 +185,9 @@ for (const { cryptoName, crypto } of cryptos)
 
     describe('keyAgg vectors', function () {
       for (const [name, vector] of Object.entries(vectors.keyAggVectors)) {
-        it(`aggregates keys ${name}`, async function () {
+        it(`aggregates keys ${name}`, function () {
           const publicKeys = vector.publicKeyIndices.map((i) => basePublicKeys[i]);
-          const key = await musig.keyAgg(publicKeys, { sort: false });
+          const key = musig.keyAgg(publicKeys, { sort: false });
           expect(Buffer.from(key.publicKey).toString('hex')).toBe(vector.expected);
           const secondPublicKeyX = Buffer.from(key.keyAggSession.rest.subarray(65, 97)).toString(
             'hex'
@@ -199,10 +210,10 @@ for (const { cryptoName, crypto } of cryptos)
         extraInput: Buffer.from(vectors.nonceArgs.extraInput, 'hex'),
       };
       for (const [name, vector] of Object.entries(vectors.nonceVectors)) {
-        it(`generates nonces ${name}`, async function () {
+        it(`generates nonces ${name}`, function () {
           const args = { ...nonceArgs };
           vector.blankArgs.forEach((i) => delete (args as Record<string, Uint8Array>)[i]);
-          const nonce = await musig.nonceGen(args);
+          const nonce = musig.nonceGen(args);
           expect(Buffer.from(nonce.secretNonce).toString('hex')).toBe(vector.expected);
         });
       }
@@ -221,24 +232,24 @@ for (const { cryptoName, crypto } of cryptos)
     describe('sign vectors', function () {
       for (const [name, vector] of Object.entries(vectors.signVectors)) {
         const { msg, secretNonce, aggNonce, secretKey, nonSignerKeyIndices } = vectors.signData;
-        it(`partial signs ${name}`, async function () {
+        it(`partial signs ${name}`, function () {
           const publicKeys: Uint8Array[] = nonSignerKeyIndices.map((i) => basePublicKeys[i]);
           const signingPublicKey = noble.schnorr.getPublicKey(secretKey);
           publicKeys.splice(vector.signerIndex, 0, signingPublicKey);
 
           let parity, keyAggSession;
           if ('tweak' in vector) {
-            ({ parity, keyAggSession } = await musig.keyAgg(publicKeys, {
+            ({ parity, keyAggSession } = musig.keyAgg(publicKeys, {
               tweaks: [Buffer.from(vector.tweak, 'hex')],
               tweaksXOnly: [vector.xOnlyTweak],
               sort: false,
             }));
           } else {
-            ({ parity, keyAggSession } = await musig.keyAgg(publicKeys, { sort: false }));
+            ({ parity, keyAggSession } = musig.keyAgg(publicKeys, { sort: false }));
           }
           expect(parity).toBe(vector.expectedParity);
 
-          const { sig, signingSession } = await musig.partialSign({
+          const { sig, signingSession } = musig.partialSign({
             msg: Buffer.from(msg, 'hex'),
             secretKey: Buffer.from(secretKey, 'hex'),
             nonce: { secretNonce: Buffer.from(secretNonce, 'hex') },
