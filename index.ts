@@ -392,7 +392,7 @@ function noneNull(keys: Array<Uint8Array | null>): keys is Uint8Array[] {
 const _coefCache = new WeakMap<Uint8Array, Map<string, Uint8Array>>();
 
 export function MuSigFactory(ecc: Crypto): MuSig {
-  function coefficient(
+  function coef(
     publicKeyHash: Uint8Array,
     publicKey: Uint8Array,
     secondPublicKey?: Uint8Array
@@ -403,14 +403,14 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       _coefCache.set(publicKeyHash, coefCache);
     }
     const key = Buffer.from(publicKey).toString('hex');
-    let coef = coefCache.get(key);
-    if (coef === undefined) {
-      coef = U8A1;
+    let coefficient = coefCache.get(key);
+    if (coefficient === undefined) {
+      coefficient = U8A1;
       if (!secondPublicKey || compare32b(publicKey, secondPublicKey) !== 0)
-        coef = ecc.taggedHash(TAGS.keyagg_coef, publicKeyHash, publicKey);
-      coefCache.set(key, coef);
+        coefficient = ecc.taggedHash(TAGS.keyagg_coef, publicKeyHash, publicKey);
+      coefCache.set(key, coefficient);
     }
-    return coef;
+    return coefficient;
   }
 
   // Information needed to partially sign for an aggregate public key
@@ -460,8 +460,8 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       let publicKey: Uint8Array | null = evenPublicKeys[initialIdx];
       if (initialIdx === 0) {
         // If no 2nd unique key, multiply initial key by its coefficient.
-        const coef = coefficient(publicKeyHash, publicKeys[initialIdx], secondPublicKey);
-        publicKey = ecc.pointMultiplyUnsafe(publicKey, coef, false);
+        const coefficient = coef(publicKeyHash, publicKeys[initialIdx], secondPublicKey);
+        publicKey = ecc.pointMultiplyUnsafe(publicKey, coefficient, false);
         if (publicKey === null) throw new Error('Point at infinity during aggregation');
       }
 
@@ -469,8 +469,8 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       // constraints of functions offered by the two ECC libraries we support.
       for (let i = 0; i < publicKeys.length; i++) {
         if (i === initialIdx) continue;
-        const coef = coefficient(publicKeyHash, publicKeys[i], secondPublicKey);
-        publicKey = ecc.pointMultiplyAndAddUnsafe(evenPublicKeys[i], coef, publicKey, false);
+        const coefficient = coef(publicKeyHash, publicKeys[i], secondPublicKey);
+        publicKey = ecc.pointMultiplyAndAddUnsafe(evenPublicKeys[i], coefficient, publicKey, false);
         if (publicKey === null) throw new Error('Point at infinity during aggregation');
       }
 
@@ -478,7 +478,7 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     }
 
     coefficient(publicKey: Uint8Array): Uint8Array {
-      return coefficient(this.publicKeyHash, publicKey, this.secondPublicKey);
+      return coef(this.publicKeyHash, publicKey, this.secondPublicKey);
     }
 
     addTweaks(tweaks: Uint8Array[], tweaksXOnly?: boolean[]): KeyAggCache {

@@ -2,11 +2,17 @@ import * as base from '../base_crypto';
 import * as vectors from './base_vectors.json';
 
 describe('Base Crypto', function () {
+  beforeAll(function () {});
 
-  beforeAll(function () {
-  });
-
-  for (const { hex, isXOnlyPoint, isPoint, pointNegate, hasEvenY, pointCompress, pointX } of vectors.point) {
+  for (const {
+    hex,
+    isXOnlyPoint,
+    isPoint,
+    pointNegate,
+    hasEvenY,
+    pointCompress,
+    pointX,
+  } of vectors.point) {
     const point = Buffer.from(hex, 'hex');
     it('isXOnlyPoint', function () {
       expect(base.isXOnlyPoint(point)).toBe(isXOnlyPoint);
@@ -23,7 +29,7 @@ describe('Base Crypto', function () {
       it('isOddPoint', function () {
         expect(base.isPoint(oddPoint)).toBe(isXOnlyPoint);
       });
-      it('oddEvenNegate', function() {
+      it('oddEvenNegate', function () {
         expect(Buffer.from(base.pointNegate(evenPoint))).toEqual(oddPoint);
         expect(Buffer.from(base.pointNegate(oddPoint))).toEqual(evenPoint);
       });
@@ -60,7 +66,6 @@ describe('Base Crypto', function () {
         expect(Buffer.from(base.pointX(point)).toString('hex')).toBe(pointX);
       }
     });
-
   }
 
   for (const { hex, isSecret, bHex, sum, product, negated, remainder } of vectors.secret) {

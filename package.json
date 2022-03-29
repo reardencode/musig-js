@@ -16,7 +16,8 @@
     "format:ci": "npm run prettier -- --check && npm run prettierout -- --check",
     "prettier": "prettier --print-width 100 --single-quote \"*.ts\" \"test/**/*.ts\"",
     "prettierout": "prettier --print-width 100 --single-quote \"lib/**/*.js\"",
-    "test": "jest",
+    "test": "npm run prettier -- --check && npm run lint && npm run build && npm run coverage",
+    "nobuild:test": "jest",
     "coverage": "jest --coverage",
     "bench": "ts-node test/benchmark.ts"
   },

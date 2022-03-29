@@ -155,7 +155,7 @@ export function pointNegate(p: Uint8Array): Uint8Array {
     const y = read32b(p.subarray(33));
     if (y >= CURVE.P) throw new Error('Expected Y coordinate mod P');
     const minusY = y === _0n ? _0n : CURVE.P - y;
-    write32b(minusY, negated.subarray(33))
+    write32b(minusY, negated.subarray(33));
   }
   return negated;
 }
