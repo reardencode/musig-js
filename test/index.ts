@@ -1,8 +1,7 @@
 import * as noble from '@noble/secp256k1';
-import * as fc from 'fast-check';
 import { AggregatePublicKey, MuSigFactory, MuSigPartialSig } from '..';
 import { nobleCrypto, tinyCrypto } from './utils';
-import * as vectors from './vectors.json';
+import * as vectors from './musig_vectors.json';
 
 interface Signer {
   secretKey: Uint8Array;
