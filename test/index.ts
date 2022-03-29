@@ -1,5 +1,5 @@
 import * as noble from '@noble/secp256k1';
-import { AggregatePublicKey, MuSigFactory, MuSigPartialSig } from '..';
+import { AggregatePublicKey, MuSigFactory, MuSigPartialSig } from '../index';
 import { nobleCrypto, tinyCrypto } from './utils';
 import * as vectors from './musig_vectors.json';
 
@@ -184,7 +184,7 @@ for (const { cryptoName, crypto } of cryptos)
           if ('secondPublicKeyIndex' in vector) {
             expect(secondPublicKeyX).toBe(publicKeys[vector.secondPublicKeyIndex].toString('hex'));
           } else {
-            expect(secondPublicKeyX).toBe(new Buffer(32).toString('hex'));
+            expect(secondPublicKeyX).toBe(Buffer.alloc(32).toString('hex'));
           }
         });
       }

@@ -1,0 +1,214 @@
+{
+    "point": [
+        {
+            "hex": "0400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": "0400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "hasEvenY": true,
+            "pointCompress": "020000000000000000000000000000000000000000000000000000000000000000",
+            "pointX": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+            "hex": "040000000000000000000000000000000000000000000000000000000000000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": false,
+            "pointCompress": "030000000000000000000000000000000000000000000000000000000000000001",
+            "pointX": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+            "hex": "0400000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": "0400000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
+            "hasEvenY": true,
+            "pointCompress": "020000000000000000000000000000000000000000000000000000000000000001",
+            "pointX": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+            "hex": "04ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": false,
+            "pointCompress": "03ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "pointX": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        },
+        {
+            "hex": "044289801366bcee6172b771cf5a7f13aaecd237a0b9a1ff9d769cabc2e6b70a34cec320a0565fb7caf11b1ca2f445f9b7b012dda5718b3cface369ee3a034ded6",
+            "isXOnlyPoint": false,
+            "isPoint": true,
+            "pointNegate": "044289801366bcee6172b771cf5a7f13aaecd237a0b9a1ff9d769cabc2e6b70a34313cdf5fa9a048350ee4e35d0bba06484fed225a8e74c30531c9611b5fcb1d59",
+            "hasEvenY": true,
+            "pointCompress": "024289801366bcee6172b771cf5a7f13aaecd237a0b9a1ff9d769cabc2e6b70a34",
+            "pointX": "4289801366bcee6172b771cf5a7f13aaecd237a0b9a1ff9d769cabc2e6b70a34"
+        },
+        {
+            "hex": "044289801366bcee6172b771cf5a7f13aaecd237a0b9a1ff9d769cabc2e6b70a34cec320a0565fb7caf11b1ca2f445f9b7b012dda5718b3cface369ee3a034ded0",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": "044289801366bcee6172b771cf5a7f13aaecd237a0b9a1ff9d769cabc2e6b70a34313cdf5fa9a048350ee4e35d0bba06484fed225a8e74c30531c9611b5fcb1d5f",
+            "hasEvenY": true,
+            "pointCompress": "024289801366bcee6172b771cf5a7f13aaecd237a0b9a1ff9d769cabc2e6b70a34",
+            "pointX": "4289801366bcee6172b771cf5a7f13aaecd237a0b9a1ff9d769cabc2e6b70a34"
+        },
+        {
+            "hex": "0500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": null,
+            "pointCompress": null,
+            "pointX": null
+        },
+        {
+            "hex": "04ff",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": null,
+            "pointCompress": null,
+            "pointX": null
+        },
+        {
+            "hex": "ff",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": null,
+            "pointCompress": null,
+            "pointX": null
+        },
+        {
+            "hex": "0000000000000000000000000000000000000000000000000000000000000000",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": null,
+            "pointCompress": null,
+            "pointX": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+            "hex": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f8179800",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": null,
+            "pointCompress": null,
+            "pointX": null
+        },
+        {
+            "hex": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            "isXOnlyPoint": true,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": null,
+            "pointCompress": null,
+            "pointX": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        },
+        {
+            "hex": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffeeffffc2e",
+            "isXOnlyPoint": true,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": null,
+            "pointCompress": null,
+            "pointX": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffeeffffc2e"
+        },
+        {
+            "hex": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+            "isXOnlyPoint": true,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": null,
+            "pointCompress": null,
+            "pointX": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"
+        },
+        {
+            "hex": "0000000000000000000000000000000000000000000000000000000000000001",
+            "isXOnlyPoint": true,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": null,
+            "pointCompress": null,
+            "pointX": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+            "hex": "0000000000000000000000000000000000000000000000000000000000000000",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": null,
+            "pointCompress": null,
+            "pointX": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+            "hex": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": null,
+            "pointCompress": null,
+            "pointX": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f"
+        }
+    ],
+    "secret": [
+        {
+            "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "isSecret": false,
+            "bHex": "0000000000000000000000000000000000000000000000000000000000000001",
+            "sum": null,
+            "product": null,
+            "negated": null,
+            "remainder": "000000000000000000000000000000014551231950b75fc4402da1732fc9bebe"
+        },
+        {
+            "hex": "0000000000000000000000000000000000000000000000000000000000000001",
+            "isSecret": true,
+            "bHex": "0000000000000000000000000000000000000000000000000000000000000001",
+            "sum": "0000000000000000000000000000000000000000000000000000000000000002",
+            "product": "0000000000000000000000000000000000000000000000000000000000000001",
+            "negated": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
+            "remainder": "0000000000000000000000000000000000000000000000000000000000000001"
+        },
+        {
+            "hex": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
+            "isSecret": true,
+            "bHex": "0000000000000000000000000000000000000000000000000000000000000001",
+            "sum": "0000000000000000000000000000000000000000000000000000000000000000",
+            "product": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
+            "negated": "0000000000000000000000000000000000000000000000000000000000000001",
+            "remainder": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140"
+        },
+        {
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "isSecret": true,
+            "bHex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "sum": "66666666666666666666666666666667abb7897fb71dc62aa69407d996302524",
+            "product": "08af90f0ea1cd4b0655b5bc4f9ae314f0d25b396d35facd731fe0eeb43fc2e4e",
+            "negated": "555555555555555555555555555555541004323c049df5911527b3e2258b9697",
+            "remainder": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+            "hex": "111111111111111111111111111111111111111111111111111111111111111111",
+            "isSecret": false,
+            "bHex": "0000000000000000000000000000000000000000000000000000000000000000",
+            "sum": null,
+            "product": null,
+            "negated": null,
+            "remainder": null
+        },
+        {
+            "hex": "0000000000000000000000000000000000000000000000000000000000000000",
+            "isSecret": true,
+            "bHex": "111111111111111111111111111111111111111111111111111111111111111111",
+            "sum": null,
+            "product": null,
+            "negated": "0000000000000000000000000000000000000000000000000000000000000000",
+            "remainder": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+    ]
+}
+

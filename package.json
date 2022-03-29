@@ -80,6 +80,7 @@
     "testRegex": "/test/(?!utils|benchmark).*?\\.ts",
     "transform": {
       "^.+\\.ts$": "ts-jest"
-    }
+    },
+    "collectCoverageFrom": ["*.ts"]
   }
 }

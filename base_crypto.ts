@@ -32,15 +32,14 @@ function read32b(bytes: Uint8Array): bigint {
   return b;
 }
 
-function write32b(num: bigint): Uint8Array {
+function write32b(num: bigint, dest: Uint8Array = new Uint8Array(32)): Uint8Array {
   if (num < _0n || num > MAX_INT) throw new Error('Expected positive 32-byte number');
-  const result = new Uint8Array(32);
-  const view = new DataView(result.buffer, result.byteOffset, result.length);
+  const view = new DataView(dest.buffer, dest.byteOffset, dest.length);
   for (let offs = 24; offs >= 0; offs -= 8) {
     view.setBigUint64(offs, num & _64mask);
     num >>= _64n;
   }
-  return result;
+  return dest;
 }
 
 function readSecret(bytes: Uint8Array): bigint {
@@ -140,42 +139,53 @@ export function secretMod(a: Uint8Array): Uint8Array {
 }
 
 export function isSecret(s: Uint8Array): boolean {
+  if (s.length !== 32) return false;
   const sN = read32b(s);
   return sN < CURVE.n;
 }
 
 export function pointNegate(p: Uint8Array): Uint8Array {
-  const negated = p.slice();
+  // hasEvenY does basic structure check, so start there
+  const even = hasEvenY(p);
+  // `from` because node.Buffer.slice doesn't copy but looks like a Uint8Array
+  const negated = Uint8Array.from(p);
   if (p.length === 33) {
-    negated[0] = p[0] === 2 ? 3 : 2;
+    negated[0] = even ? 3 : 2;
   } else if (p.length === 65) {
     const y = read32b(p.subarray(33));
     if (y >= CURVE.P) throw new Error('Expected Y coordinate mod P');
-    const minusY = CURVE.P - y;
-    negated.set(write32b(minusY), 33);
-  } else {
-    throw new Error('Wrong length to be a point');
+    const minusY = y === _0n ? _0n : CURVE.P - y;
+    write32b(minusY, negated.subarray(33))
   }
   return negated;
 }
 
 export function pointX(p: Uint8Array): Uint8Array {
   if (p.length === 32) return p;
-  if (p.length === 33 || p.length == 65) return p.slice(1, 33);
-  throw new Error('Wrong length to be a point');
+  hasEvenY(p); // hasEvenY throws if not well structured
+  return p.slice(1, 33);
 }
 
 export function hasEvenY(p: Uint8Array): boolean {
-  if (p.length === 33) return p[0] % 2 === 0;
-  if (p.length === 65) return p[64] % 2 === 0;
+  if (p.length === 33) {
+    if (p[0] === 2) return true;
+    else if (p[0] === 3) return false;
+    else throw new Error('Wrong first byte to be a point');
+  }
+  if (p.length === 65) {
+    if (p[0] !== 4) throw new Error('Wrong first byte to be point');
+    return p[64] % 2 === 0;
+  }
   throw new Error('Wrong length to be a point');
 }
 
 export function pointCompress(p: Uint8Array): Uint8Array {
+  // hasEvenY does basic structure check, so start there
+  const even = hasEvenY(p);
   if (p.length === 33) return p;
-  if (p.length !== 65) throw new Error('Wrong length to be a point');
+  // `from` because node.Buffer.slice doesn't copy but looks like a Uint8Array
   const compressed = new Uint8Array(33);
   compressed.set(p.subarray(1, 33), 1);
-  compressed[0] = hasEvenY(p) ? 2 : 3;
+  compressed[0] = even ? 2 : 3;
   return compressed;
 }
