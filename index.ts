@@ -512,11 +512,10 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       return { base: this.publicKeyHash, rest };
     }
     static load(session: KeyAggSession): KeyAggCache {
-      // 32, and 65+32+1+32
-      if (session.base.length !== 32 || session.rest.length !== 130)
-        throw new TypeError(
-          `expected 32 + 130 bytes, not ${session.base.length} + ${session.rest.length}`
-        );
+      if (session.base.length !== 32)
+        throw new TypeError(`Expected 32 byte session.base, not ${session.base.length}`);
+      if (session.rest.length !== 65 + 32 + 1 + 32)
+        throw new TypeError(`Expected (65+32+1+32) byte session.rest, not ${session.rest.length}`);
       const secondPublicKey = session.rest.subarray(65, 97);
       const cache = new KeyAggCache(
         session.base,
@@ -573,7 +572,8 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     }
 
     static load(session: Uint8Array): ProcessedNonce {
-      if (session.length !== 161) throw new TypeError(`expected 161 bytes, not ${session.length}`);
+      if (session.length !== 65 + 32 + 32 + 32)
+        throw new TypeError(`expected (65+32+32+32) bytes, not ${session.length}`);
       return new ProcessedNonce(
         session.subarray(0, 65),
         session.subarray(65, 97),
