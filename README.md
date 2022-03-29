@@ -23,7 +23,7 @@ This example uses `Buffer` for convenience, but it is not required, any
 `Uint8Array` will do.
 
 ```typescript
-import { MuSigFactory } from '.';
+import { MuSigFactory, Nonce } from '.';
 import { tinyCrypto } from './test/utils';
 import * as tiny from 'tiny-secp256k1';
 
@@ -46,14 +46,14 @@ const msg = fromHex('f1d1d6ef2d97319149aaed92c69ebb21d6c54c0fc4e908f4f4ee42a1e5b
 
 // Signing round 1 - generate nonces, share public nonces
 
-const nonce1 = musig.nonceGen({
+const nonce1: { secretNonce?: Uint8Array, publicNonce: Uint8Array } = musig.nonceGen({
   sessionId: fromHex('0000000000000000000000000000000000000000000000000000000000000001'),
   secretKey: secretKey1,
   msg,
   aggregatePublicKey
 });
 
-const nonce2 = musig.nonceGen({
+const nonce2: { secretNonce?: Uint8Array, publicNonce: Uint8Array } = musig.nonceGen({
   sessionId: fromHex('0000000000000000000000000000000000000000000000000000000000000001'),
   secretKey: secretKey2,
   msg,
@@ -69,49 +69,52 @@ const aggNonce = musig.nonceAgg(sharedPublicNonces);
 const { sig: sig1, signingSession: signingSession1 } = musig.partialSign({
   msg,
   secretKey: secretKey1,
-  nonce: nonce1,
+  nonce: nonce1 as Nonce,
   aggNonce,
   keyAggSession
 });
+delete nonce1.secretNonce;
 
 const { sig: sig2, signingSession: signingSession2 } = musig.partialSign({
   msg,
   secretKey: secretKey2,
-  nonce: nonce2,
+  nonce: nonce2 as Nonce,
   aggNonce,
   keyAggSession
 });
+delete nonce2.secretNonce;
+
+const sharedSigs = [sig1, sig2];
 
 const check2By1 = musig.partialVerify({
-  sig: sig2,
+  sig: sharedSigs[1],
   msg,
   publicKey: pubKey2,
   publicNonce: sharedPublicNonces[1],
   aggNonce,
   keyAggSession,
-  signingSession: signingSession1
+  signingSession: signingSession1 // Optional
 });
 
 const check1By2 = musig.partialVerify({
-  sig: sig1,
+  sig: sharedSigs[0],
   msg,
   publicKey: pubKey1,
   publicNonce: sharedPublicNonces[0],
   aggNonce,
   keyAggSession,
-  signingSession: signingSession2
+  signingSession: signingSession2 // Optional
 });
 
 console.log(`check2By1: ${!!check2By1}, check1By2: ${!!check1By2}`);
 
-const sigBy1 = musig.signAgg([sig1, sig2], signingSession1);
+const signingSession = musig.createSigningSession(aggNonce, msg, keyAggSession);
+// All of the signing sessions are interchangeable, and derived from public information
+const sig = musig.signAgg(sharedSigs, signingSession);
 
-const sigBy2 = musig.signAgg([sig2, sig1], signingSession2);
-
-console.log(toHex(sigBy1));
+console.log(toHex(sig));
 // 13a8d88bb5727fe945293f81f0f1000eecb8ded5ca950bcfb74d6536d456372b9ae00ccb9cbacc00a3bca07129920b88d4df4f5c24ece1f7159ff94c1dde1bba
-console.log(toHex(sigBy1) === toHex(sigBy2));
 
-const valid = tiny.verifySchnorr(msg, aggregatePublicKey, sigBy1);
+const valid = tiny.verifySchnorr(msg, aggregatePublicKey, sig);
 console.log(`final sig valid: ${valid}`);
 ```
