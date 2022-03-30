@@ -358,8 +358,14 @@ for (const { cryptoName, crypto } of cryptos) {
       });
     });
 
-    describe('addTweaks errors', function () {
+    describe('addTweaks', function () {
       const { keyAggSession } = musig.keyAgg([validX]);
+
+      it('performs ordinary tweaking if tweaksXOnly undefined', function () {
+        const k1 = musig.addTweaks(keyAggSession, [validTweak]);
+        const k2 = musig.addTweaks(keyAggSession, [validTweak], [false]);
+        expect(Buffer.from(k1.keyAggSession.rest)).toEqual(Buffer.from(k2.keyAggSession.rest));
+      });
 
       it('rejects wrong length', function () {
         expect(() => musig.addTweaks(keyAggSession, [validTweak], [false, true])).toThrow();
@@ -379,17 +385,41 @@ for (const { cryptoName, crypto } of cryptos) {
     });
 
     describe('partialSign errors', function () {
+      const { keyAggSession } = musig.keyAgg([validX]);
+      const aggNonce = new Uint8Array(66);
+      aggNonce.set(noble.getPublicKey(noble.utils.randomPrivateKey(), true), 0);
+      aggNonce.set(noble.getPublicKey(noble.utils.randomPrivateKey(), true), 33);
+      const secretNonce = new Uint8Array(64);
+      secretNonce.set(noble.utils.randomPrivateKey(), 0);
+      secretNonce.set(noble.utils.randomPrivateKey(), 32);
+
+      for (const badNonceI of [0, 1]) {
+        it('rejects bad secretNonce', function () {
+          const invalidSecretNonce = Uint8Array.from(secretNonce);
+          invalidSecretNonce.set(notSecret, badNonceI * 32);
+
+          expect(() =>
+            musig.partialSign({
+              msg: noble.utils.randomBytes(),
+              secretKey: noble.utils.randomPrivateKey(),
+              nonce: { secretNonce: invalidSecretNonce },
+              aggNonce,
+              keyAggSession,
+            })
+          ).toThrow(/Invalid secret nonce/);
+        });
+      }
+
       it('rejects bad secretKey', function () {
         expect(() =>
           musig.partialSign({
             msg: noble.utils.randomBytes(),
             secretKey: notSecret,
-            nonce: { secretNonce: noble.utils.randomBytes(64) },
-            aggNonce: noble.utils.randomBytes(66),
-            keyAggSession: { base: new Uint8Array(32), rest: new Uint8Array(130) },
-            signingSession: new Uint8Array(161),
+            nonce: { secretNonce },
+            aggNonce,
+            keyAggSession,
           })
-        ).toThrow();
+        ).toThrow(/Invalid secret key/);
       });
     });
   });
