@@ -2,7 +2,7 @@ import { Crypto, MuSigFactory } from '..';
 import { nobleCrypto, tinyCrypto } from './utils';
 import * as secp from '@noble/secp256k1';
 import createHmac = require('create-hmac');
-import * as vectors from './vectors.json';
+import * as vectors from './musig_vectors.json';
 
 const { run, mark, logMem } = require('micro-bmark');
 

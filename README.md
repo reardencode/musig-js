@@ -36,7 +36,7 @@ const secretKey2 = fromHex('644b07a5cb70f68316cd9a51cabdc61c4d0b1f38b189d0c92370
 const pubKey2 = fromHex('8c9444613a1bb8b442b81cc7fbf81a186a34d7c4e596362543e17dde3efdc4b3');
 const tweak = fromHex('8df63a82e5e71884bb16e2896e12ba2b7fe0e670d466be03b578fc435d5c9876');
 
-const { publicKey: aggregatePublicKey, keyAggSession } = musig.keyAgg(
+const { publicKey, keyAggSession } = musig.keyAgg(
   [pubKey1, pubKey2],
   { tweaks: [tweak], tweaksXOnly: [true] }
 );
@@ -49,14 +49,14 @@ const nonce1: { secretNonce?: Uint8Array, publicNonce: Uint8Array } = musig.nonc
   sessionId: fromHex('0000000000000000000000000000000000000000000000000000000000000001'),
   secretKey: secretKey1,
   msg,
-  aggregatePublicKey
+  publicKey,
 });
 
 const nonce2: { secretNonce?: Uint8Array, publicNonce: Uint8Array } = musig.nonceGen({
   sessionId: fromHex('0000000000000000000000000000000000000000000000000000000000000001'),
   secretKey: secretKey2,
   msg,
-  aggregatePublicKey
+  publicKey,
 });
 
 const sharedPublicNonces = [nonce1.publicNonce, nonce2.publicNonce];
@@ -114,6 +114,6 @@ const sig = musig.signAgg(sharedSigs, signingSession);
 console.log(toHex(sig));
 // 13a8d88bb5727fe945293f81f0f1000eecb8ded5ca950bcfb74d6536d456372b9ae00ccb9cbacc00a3bca07129920b88d4df4f5c24ece1f7159ff94c1dde1bba
 
-const valid = tiny.verifySchnorr(msg, aggregatePublicKey, sig);
+const valid = tiny.verifySchnorr(msg, publicKey, sig);
 console.log(`final sig valid: ${valid}`);
 ```
