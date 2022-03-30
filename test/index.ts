@@ -29,7 +29,7 @@ const nonceArgs = {
   sessionId: Buffer.from(vectors.nonceArgs.sessionId, 'hex'),
   secretKey: Buffer.from(vectors.nonceArgs.secretKey, 'hex'),
   msg: Buffer.from(vectors.nonceArgs.msg, 'hex'),
-  aggregatePublicKey: Buffer.from(vectors.nonceArgs.aggregatePublicKey, 'hex'),
+  publicKey: Buffer.from(vectors.nonceArgs.publicKey, 'hex'),
   extraInput: Buffer.from(vectors.nonceArgs.extraInput, 'hex'),
 };
 
@@ -100,7 +100,7 @@ for (const { cryptoName, crypto } of cryptos) {
                       sessionId,
                       secretKey: signer.secretKey,
                       msg,
-                      aggregatePublicKey: aggregatePublicKey.publicKey,
+                      publicKey: aggregatePublicKey.publicKey,
                     });
                     break;
                   case 2:
@@ -108,7 +108,7 @@ for (const { cryptoName, crypto } of cryptos) {
                       sessionId: noble.utils.randomBytes(),
                       secretKey: signer.secretKey,
                       msg,
-                      aggregatePublicKey: aggregatePublicKey.publicKey,
+                      publicKey: aggregatePublicKey.publicKey,
                     });
                     break;
                   case 3:
@@ -116,7 +116,7 @@ for (const { cryptoName, crypto } of cryptos) {
                       sessionId: noble.utils.randomBytes(),
                       secretKey: signer.secretKey,
                       msg,
-                      aggregatePublicKey: aggregatePublicKey.publicKey,
+                      publicKey: aggregatePublicKey.publicKey,
                       extraInput: noble.utils.randomBytes(),
                     });
                     break;
@@ -312,7 +312,15 @@ for (const { cryptoName, crypto } of cryptos) {
       const signingSession = musig.createSigningSession(aggNonce, msg, keyAggSession);
 
       it('rejects wrong length', function () {
-        expect(() => musig.signAgg(sigs, new Uint8Array(160))).toThrow();
+        expect(() => musig.createSigningSession(new Uint8Array(65), msg, keyAggSession)).toThrow(
+          /Invalid aggNonce length/
+        );
+        expect(() =>
+          musig.createSigningSession(aggNonce, new Uint8Array(31), keyAggSession)
+        ).toThrow(/Invalid msg length/);
+        expect(() => musig.signAgg(sigs, new Uint8Array(160))).toThrow(
+          /Invalid signingSession length/
+        );
       });
 
       it('rejects non-point final nonce', function () {
@@ -377,9 +385,7 @@ for (const { cryptoName, crypto } of cryptos) {
         expect(() => musig.nonceGen({ ...nonceArgs, sessionId: new Uint8Array(31) })).toThrow();
         expect(() => musig.nonceGen({ ...nonceArgs, secretKey: new Uint8Array(31) })).toThrow();
         expect(() => musig.nonceGen({ ...nonceArgs, msg: new Uint8Array(31) })).toThrow();
-        expect(() =>
-          musig.nonceGen({ ...nonceArgs, aggregatePublicKey: new Uint8Array(31) })
-        ).toThrow();
+        expect(() => musig.nonceGen({ ...nonceArgs, publicKey: new Uint8Array(31) })).toThrow();
         expect(() => musig.nonceGen({ ...nonceArgs, extraInput: new Uint8Array(31) })).toThrow();
       });
     });
@@ -406,7 +412,7 @@ for (const { cryptoName, crypto } of cryptos) {
               aggNonce,
               keyAggSession,
             })
-          ).toThrow(/Invalid secret nonce/);
+          ).toThrow(/Invalid secretNonce/);
         });
       }
 
@@ -419,7 +425,7 @@ for (const { cryptoName, crypto } of cryptos) {
             aggNonce,
             keyAggSession,
           })
-        ).toThrow(/Invalid secret key/);
+        ).toThrow(/Invalid secretKey/);
       });
     });
   });

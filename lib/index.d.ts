@@ -6,11 +6,11 @@ export interface MuSig {
         sort?: boolean;
     }): AggregatePublicKey;
     addTweaks(keyAggSession: KeyAggSession, tweaks: Uint8Array[], tweaksXOnly?: boolean[]): AggregatePublicKey;
-    nonceGen({ sessionId, secretKey, msg, aggregatePublicKey, extraInput, }: {
+    nonceGen({ sessionId, secretKey, msg, publicKey, extraInput, }: {
         sessionId: Uint8Array;
         secretKey?: Uint8Array;
         msg?: Uint8Array;
-        aggregatePublicKey?: Uint8Array;
+        publicKey?: Uint8Array;
         extraInput?: Uint8Array;
     }): {
         secretNonce: Uint8Array;

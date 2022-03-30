@@ -44,8 +44,8 @@ export interface MuSig {
    * random data, otherwise a value guaranteed not to repeat for the secret key
    * @param secretKey the secret key which will eventually sign with this nonce
    * @param msg the messaeg which will eventually be signed with this nonce
-   * @param aggregatePublicKey the x-coordinate of the aggregate public key
-   * that this nonce will be signing a part of
+   * @param publicKey the x-coordinate of the aggregate public key that this
+   * nonce will be signing a part of
    * @param extraInput 32-bytes of additional input which will contribute to
    * the generated nonce
    * @return the generated secret nonce (64 bytes), and its corresponding
@@ -55,13 +55,13 @@ export interface MuSig {
     sessionId,
     secretKey,
     msg,
-    aggregatePublicKey,
+    publicKey,
     extraInput,
   }: {
     sessionId: Uint8Array;
     secretKey?: Uint8Array;
     msg?: Uint8Array;
-    aggregatePublicKey?: Uint8Array;
+    publicKey?: Uint8Array;
     extraInput?: Uint8Array;
   }): { secretNonce: Uint8Array; publicNonce: Uint8Array };
 
@@ -374,7 +374,6 @@ U8A1[31] = 1;
  * @returns < 0, 0, > 0 if a is < b, === b or > b respectively
  */
 function compare32b(a: Uint8Array, b: Uint8Array): number {
-  if (a.length !== 32 || b.length !== 32) throw new Error('Can only compare 32 byte arrays');
   const aD = new DataView(a.buffer, a.byteOffset, a.length);
   const bD = new DataView(b.buffer, b.byteOffset, b.length);
   for (let i = 0; i < 8; i++) {
@@ -424,9 +423,7 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       readonly tweak: Uint8Array = U8A0
     ) {
       if (
-        publicKey.length !== 65 ||
         !ecc.isPoint(publicKey) ||
-        publicKeyHash.length !== 32 ||
         (secondPublicKey !== undefined && !ecc.isXOnlyPoint(secondPublicKey)) ||
         (compare32b(tweak, U8A0) !== 0 && !ecc.isSecret(tweak))
       )
@@ -444,7 +441,6 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     }
 
     static fromPublicKeys(publicKeys: Uint8Array[], sort = true): KeyAggCache {
-      if (publicKeys.length === 0) throw new Error('Cannot aggregate 0 public keys');
       if (sort) publicKeys.sort((a, b) => compare32b(a, b));
       const evenPublicKeys = publicKeys.map((pk) => ecc.liftX(pk));
       if (!noneNull(evenPublicKeys)) throw new Error('Invalid public key');
@@ -481,10 +477,7 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       return coef(this.publicKeyHash, publicKey, this.secondPublicKey);
     }
 
-    addTweaks(tweaks: Uint8Array[], tweaksXOnly?: boolean[]): KeyAggCache {
-      if (tweaksXOnly === undefined) tweaksXOnly = new Array(tweaks.length).fill(false);
-      if (tweaks.length !== tweaksXOnly.length)
-        throw new Error('tweaks and tweaksXOnly have different lengths');
+    addTweaks(tweaks: Uint8Array[], tweaksXOnly: boolean[]): KeyAggCache {
       let publicKey: Uint8Array | null = this.publicKey;
       let parity = this.parity;
       let tweak = this.tweak;
@@ -496,7 +489,7 @@ export function MuSigFactory(ecc: Crypto): MuSig {
           publicKey = ecc.pointNegate(publicKey); // -1 * Q[v-1]
         }
         publicKey = ecc.pointAddTweak(publicKey, tweaks[i], false); // +/-Q + tG
-        if (publicKey === null) throw new Error('Tweak failed');
+        if (publicKey === null) throw new Error('Unexpected point at infinity during tweaking');
         tweak = ecc.secretAdd(tweak, tweaks[i]);
       }
 
@@ -512,10 +505,6 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       return { base: this.publicKeyHash, rest };
     }
     static load(session: KeyAggSession): KeyAggCache {
-      if (session.base.length !== 32)
-        throw new TypeError(`Expected 32 byte session.base, not ${session.base.length}`);
-      if (session.rest.length !== 65 + 32 + 1 + 32)
-        throw new TypeError(`Expected (65+32+1+32) byte session.rest, not ${session.rest.length}`);
       const secondPublicKey = session.rest.subarray(65, 97);
       const cache = new KeyAggCache(
         session.base,
@@ -557,7 +546,6 @@ export function MuSigFactory(ecc: Crypto): MuSig {
 
       const coefficient = ecc.taggedHash(TAGS.musig_noncecoef, aggNonce, pubKeyX, msg);
 
-      if (aggNonce.length !== 66) throw new Error('Invalid aggNonce length');
       const aggNonces = [aggNonce.subarray(0, 33), aggNonce.subarray(33)];
       const r = ecc.pointMultiplyAndAddUnsafe(aggNonces[1], coefficient, aggNonces[0], false);
       if (r === null) throw new Error('Unexpected final nonce at infinity');
@@ -573,8 +561,6 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     }
 
     static load(session: Uint8Array): ProcessedNonce {
-      if (session.length !== 65 + 32 + 32 + 32)
-        throw new TypeError(`expected (65+32+32+32) bytes, not ${session.length}`);
       return new ProcessedNonce(
         session.subarray(0, 65),
         session.subarray(65, 97),
@@ -595,7 +581,6 @@ export function MuSigFactory(ecc: Crypto): MuSig {
 
   function normalizeNonceArg(p?: Uint8Array): [Uint8Array] | [Uint8Array, Uint8Array] {
     if (p === undefined) return [Uint8Array.of(0)];
-    if (p.length !== 32) throw new Error('Expected 32 bytes');
     return [Uint8Array.of(32), p];
   }
 
@@ -628,9 +613,9 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     const ea = ecc.secretMultiply(challenge, cache.coefficient(ecc.pointX(publicKey)));
 
     const ver = ecc.pointMultiplyAndAddUnsafe(publicKey, ea, rj, true);
-    if (ver === null) return false;
+    if (ver === null) throw new Error('Unexpected verification point at infinity');
     const sG = ecc.getPublicKey(sig, true);
-    if (sG === null) return false;
+    if (sG === null) throw new Error('Unexpected signature point at infinity');
     return ver[0] === sG[0] && compare32b(ver.subarray(1), sG.subarray(1)) === 0;
   }
 
@@ -667,6 +652,46 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     return sig;
   }
 
+  const pubKeyArgs = ['publicKey', 'publicKeys'] as const;
+  const secretArgs = ['tweaks', 'secretKey', 'sig', 'sigs'] as const;
+  const otherArgs32b = ['msg', 'base', 'sessionId', 'extraInput'] as const;
+  const args32b = [...pubKeyArgs, ...secretArgs, ...otherArgs32b] as const;
+  const pubNonceArgs = ['publicNonce', 'publicNonces', 'aggNonce'] as const;
+  const otherArgs = ['secretNonce', 'rest', 'signingSession'] as const;
+  type ArgName = typeof args32b[number] | typeof pubNonceArgs[number] | typeof otherArgs[number];
+  type Args = { [A in ArgName]?: Uint8Array | Uint8Array[] };
+
+  const argLengths = new Map();
+  args32b.forEach((a) => argLengths.set(a, 32));
+  pubNonceArgs.forEach((a) => argLengths.set(a, 66));
+  argLengths.set('secretNonce', 64);
+  argLengths.set('rest', 130);
+  argLengths.set('signingSession', 161);
+  const secretNames = new Set([...secretArgs, 'secretNonce']);
+
+  function checkArgs(args: Args): void {
+    for (let [name, values] of Object.entries(args)) {
+      if (values === undefined) continue;
+      values = Array.isArray(values) ? values : [values];
+      if (values.length === 0) throw new TypeError(`0-length ${name}s not supported`);
+      for (const value of values) {
+        if (value.length !== argLengths.get(name)) throw new TypeError(`Invalid ${name} length`);
+        if (!secretNames.has(name)) continue;
+        for (let i = 0; i < value.length; i += 32)
+          if (!ecc.isSecret(value.subarray(i, i + 32))) throw new TypeError(`Invalid ${name}`);
+        // No need for a public key x-to-curve check. They're liftX'd for use any way.
+      }
+    }
+  }
+
+  function initTweaks(tweaks: Uint8Array[], tweaksXOnly?: boolean[]): boolean[] {
+    checkArgs({ tweaks });
+    if (tweaksXOnly === undefined) return new Array(tweaks.length).fill(false);
+    if (tweaks.length !== tweaksXOnly.length)
+      throw new Error('tweaks and tweaksXOnly have different lengths');
+    return tweaksXOnly;
+  }
+
   return {
     keyAgg: (
       publicKeys: Uint8Array[],
@@ -676,9 +701,12 @@ export function MuSigFactory(ecc: Crypto): MuSig {
         sort?: boolean;
       } = {}
     ): AggregatePublicKey => {
-      let cache = KeyAggCache.fromPublicKeys(publicKeys, opts.sort);
-      if (opts.tweaks !== undefined) cache = cache.addTweaks(opts.tweaks, opts.tweaksXOnly);
-      return cache.toAggregatePublicKey();
+      checkArgs({ publicKeys });
+      const cache = KeyAggCache.fromPublicKeys(publicKeys, opts.sort);
+      if (opts.tweaks === undefined) return cache.toAggregatePublicKey();
+
+      opts.tweaksXOnly = initTweaks(opts.tweaks, opts.tweaksXOnly);
+      return cache.addTweaks(opts.tweaks, opts.tweaksXOnly).toAggregatePublicKey();
     },
 
     addTweaks: (
@@ -686,9 +714,9 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       tweaks: Uint8Array[],
       tweaksXOnly?: boolean[]
     ): AggregatePublicKey => {
-      let cache = KeyAggCache.load(keyAggSession);
-      cache = cache.addTweaks(tweaks, tweaksXOnly);
-      return cache.toAggregatePublicKey();
+      checkArgs(keyAggSession);
+      tweaksXOnly = initTweaks(tweaks, tweaksXOnly);
+      return KeyAggCache.load(keyAggSession).addTweaks(tweaks, tweaksXOnly).toAggregatePublicKey();
     },
 
     // See https://github.com/ElementsProject/secp256k1-zkp/blob/8fd97d8/include/secp256k1_musig.h#L326
@@ -697,23 +725,23 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       sessionId,
       secretKey,
       msg,
-      aggregatePublicKey,
+      publicKey,
       extraInput,
     }: {
       sessionId: Uint8Array;
       secretKey?: Uint8Array;
       msg?: Uint8Array;
-      aggregatePublicKey?: Uint8Array;
+      publicKey?: Uint8Array;
       extraInput?: Uint8Array;
     }): { secretNonce: Uint8Array; publicNonce: Uint8Array } => {
-      if (sessionId.length !== 32) throw new Error('Expected 32-byte sessionId');
+      checkArgs({ sessionId, secretKey, msg, publicKey, extraInput });
       const seed = ecc.taggedHash(
         TAGS.musig_nonce,
         ...[
           sessionId,
           ...normalizeNonceArg(secretKey),
           ...normalizeNonceArg(msg),
-          ...normalizeNonceArg(aggregatePublicKey),
+          ...normalizeNonceArg(publicKey),
           ...normalizeNonceArg(extraInput),
         ]
       );
@@ -730,11 +758,13 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       return { secretNonce, publicNonce };
     },
 
-    nonceAgg: (nonces: Uint8Array[]): Uint8Array => {
-      let aggNonces = [nonces[0].subarray(0, 33), nonces[0].subarray(33)];
-      for (let i = 1; i < nonces.length; i++) {
-        const K1 = ecc.pointAdd(aggNonces[0], nonces[i].subarray(0, 33), false);
-        const K2 = ecc.pointAdd(aggNonces[1], nonces[i].subarray(33), false);
+    nonceAgg: (publicNonces: Uint8Array[]): Uint8Array => {
+      checkArgs({ publicNonces });
+
+      let aggNonces = [publicNonces[0].subarray(0, 33), publicNonces[0].subarray(33)];
+      for (let i = 1; i < publicNonces.length; i++) {
+        const K1 = ecc.pointAdd(aggNonces[0], publicNonces[i].subarray(0, 33), false);
+        const K2 = ecc.pointAdd(aggNonces[1], publicNonces[i].subarray(33), false);
         if (K1 === null || K2 === null) {
           const G = ecc.getPublicKey(U8A1, true);
           aggNonces = [G!, G!];
@@ -752,7 +782,12 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       aggNonce: Uint8Array,
       msg: Uint8Array,
       keyAggSession: KeyAggSession
-    ): Uint8Array => ProcessedNonce.process(aggNonce, msg, KeyAggCache.load(keyAggSession)).dump(),
+    ): Uint8Array => {
+      checkArgs(keyAggSession);
+      checkArgs({ aggNonce, msg });
+
+      return ProcessedNonce.process(aggNonce, msg, KeyAggCache.load(keyAggSession)).dump();
+    },
 
     partialSign: ({
       msg,
@@ -771,16 +806,16 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       signingSession?: Uint8Array;
       verify: boolean;
     }): MuSigPartialSig => {
-      if (msg.length !== 32) throw new Error('Invalid msg length');
+      checkArgs(nonce);
+      checkArgs(keyAggSession);
+      checkArgs({ msg, secretKey, aggNonce, signingSession });
+
       const publicKey = ecc.getPublicKey(secretKey, false);
       if (publicKey === null) throw new Error('Invalid secret key, no corresponding public key');
-      if (nonce.secretNonce.length !== 64) throw new Error('Invalid secret nonce length');
       const secretNonces: [Uint8Array, Uint8Array] = [
         nonce.secretNonce.subarray(0, 32),
         nonce.secretNonce.subarray(32),
       ];
-      if (!ecc.isSecret(secretNonces[0]) || !ecc.isSecret(secretNonces[1]))
-        throw new Error('Invalid secret nonce');
       const cache = KeyAggCache.load(keyAggSession);
       const processedNonce = signingSession
         ? ProcessedNonce.load(signingSession)
@@ -797,7 +832,6 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       if (verify) {
         let publicNonces: [Uint8Array, Uint8Array];
         if (nonce.publicNonce) {
-          if (nonce.publicNonce.length !== 66) throw new Error('Invalid public nonce length');
           publicNonces = [nonce.publicNonce.subarray(0, 33), nonce.publicNonce.subarray(33)];
         } else {
           const K1 = ecc.getPublicKey(secretNonces[0], false);
@@ -835,10 +869,9 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       keyAggSession: KeyAggSession;
       signingSession?: Uint8Array;
     }): false | MuSigPartialSig => {
-      if (sig.length !== 32) throw new Error('Invalid sig length');
-      if (msg.length !== 32) throw new Error('Invalid msg length');
-      if (publicKey.length !== 32) throw new Error('Invalid publicKey length');
-      if (publicNonce.length !== 66) throw new Error('Invalid public nonce length');
+      checkArgs(keyAggSession);
+      checkArgs({ sig, msg, publicKey, publicNonce, aggNonce, signingSession });
+
       const publicNonces: [Uint8Array, Uint8Array] = [
         publicNonce.subarray(0, 33),
         publicNonce.subarray(33),
@@ -860,6 +893,8 @@ export function MuSigFactory(ecc: Crypto): MuSig {
     },
 
     signAgg: (sigs: Uint8Array[], signingSession: Uint8Array): Uint8Array => {
+      checkArgs({ sigs, signingSession });
+
       const { finalNonce, sPart } = ProcessedNonce.load(signingSession);
       const aggS = sigs.reduce((a, b) => ecc.secretAdd(a, b), sPart);
       const sig = new Uint8Array(64);
