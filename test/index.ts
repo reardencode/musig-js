@@ -10,6 +10,29 @@ interface Signer {
   sig?: Uint8Array;
 }
 
+const validX = noble.schnorr.getPublicKey(noble.utils.randomPrivateKey());
+const invalidX = Buffer.from(
+  'a02b2026e3b9c3842684d892cd8cf3a30530c21ec6d75d1d03ed9f4f536af692',
+  'hex'
+);
+const invalidPoint = Buffer.from(
+  '0400000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001',
+  'hex'
+);
+const notSecret = Buffer.from(
+  'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+  'hex'
+);
+const validTweak = noble.utils.randomPrivateKey();
+
+const nonceArgs = {
+  sessionId: Buffer.from(vectors.nonceArgs.sessionId, 'hex'),
+  secretKey: Buffer.from(vectors.nonceArgs.secretKey, 'hex'),
+  msg: Buffer.from(vectors.nonceArgs.msg, 'hex'),
+  aggregatePublicKey: Buffer.from(vectors.nonceArgs.aggregatePublicKey, 'hex'),
+  extraInput: Buffer.from(vectors.nonceArgs.extraInput, 'hex'),
+};
+
 const tweaks = new Array(5).fill(0).map(() => noble.utils.randomPrivateKey());
 const tweaksXOnly = new Array(5).fill(0).map((_, i) => (tweaks[0][i] & 1) === 1);
 const cryptos = [
@@ -17,7 +40,7 @@ const cryptos = [
   { cryptoName: 'tiny', crypto: tinyCrypto },
 ];
 
-for (const { cryptoName, crypto } of cryptos)
+for (const { cryptoName, crypto } of cryptos) {
   describe(cryptoName, function () {
     const musig = MuSigFactory(crypto);
 
@@ -116,9 +139,10 @@ for (const { cryptoName, crypto } of cryptos)
                 msg,
                 aggregatePublicKey.keyAggSession
               );
+              expect(signingSession).toHaveLength(161);
             });
 
-            it('makes partial sigs', function () {
+            it(`makes partial sigs ${signers.length % 2 === 1 ? 'w/session' : ''}`, function () {
               for (const signer of signers) {
                 const { sig, signingSession: sigSigningSession } = musig.partialSign({
                   msg,
@@ -129,6 +153,7 @@ for (const { cryptoName, crypto } of cryptos)
                   },
                   aggNonce,
                   keyAggSession: aggregatePublicKey.keyAggSession,
+                  signingSession: signers.length % 2 === 1 ? signingSession : undefined,
                 });
                 signer.sig = sig;
                 expect(Buffer.from(sigSigningSession)).toEqual(Buffer.from(signingSession));
@@ -136,7 +161,7 @@ for (const { cryptoName, crypto } of cryptos)
               }
             });
 
-            it('verifies partial sigs', function () {
+            it(`verifies partial sigs ${signers.length % 2 === 1 ? 'w/session' : ''}`, function () {
               for (const signer of signers) {
                 const result = musig.partialVerify({
                   sig: signer.sig!,
@@ -145,25 +170,10 @@ for (const { cryptoName, crypto } of cryptos)
                   publicNonce: signer.noncePair!.publicNonce,
                   aggNonce,
                   keyAggSession: aggregatePublicKey.keyAggSession,
+                  signingSession: signers.length % 2 === 1 ? signingSession : undefined,
                 });
                 if (!result) throw new Error('Expected result to be truthy');
                 expect(Buffer.from(result.signingSession)).toEqual(Buffer.from(signingSession));
-              }
-            });
-
-            it('verifies partial sigs w/session', function () {
-              for (const signer of signers) {
-                expect(
-                  musig.partialVerify({
-                    sig: signer.sig!,
-                    msg,
-                    publicKey: signer.publicKey,
-                    publicNonce: signer.noncePair!.publicNonce,
-                    aggNonce,
-                    keyAggSession: aggregatePublicKey.keyAggSession,
-                    signingSession,
-                  })
-                ).toBeTruthy();
               }
             });
 
@@ -202,13 +212,6 @@ for (const { cryptoName, crypto } of cryptos)
     });
 
     describe('nonceGen vectors', function () {
-      const nonceArgs = {
-        sessionId: Buffer.from(vectors.nonceArgs.sessionId, 'hex'),
-        secretKey: Buffer.from(vectors.nonceArgs.secretKey, 'hex'),
-        msg: Buffer.from(vectors.nonceArgs.msg, 'hex'),
-        aggregatePublicKey: Buffer.from(vectors.nonceArgs.aggregatePublicKey, 'hex'),
-        extraInput: Buffer.from(vectors.nonceArgs.extraInput, 'hex'),
-      };
       for (const [name, vector] of Object.entries(vectors.nonceVectors)) {
         it(`generates nonces ${name}`, function () {
           const args = { ...nonceArgs };
@@ -263,4 +266,131 @@ for (const { cryptoName, crypto } of cryptos)
         });
       }
     });
+
+    describe('keyAggSession', function () {
+      const { keyAggSession } = musig.keyAgg([
+        noble.schnorr.getPublicKey(noble.utils.randomPrivateKey()),
+      ]);
+      const tweaks = [validTweak];
+
+      it('rejects wrong base length', function () {
+        const session = { ...keyAggSession, base: new Uint8Array(31) };
+        expect(() => musig.addTweaks(session, tweaks)).toThrow();
+      });
+
+      it('rejects wrong rest length', function () {
+        const session = { ...keyAggSession, rest: new Uint8Array(131) };
+        expect(() => musig.addTweaks(session, tweaks)).toThrow();
+      });
+
+      it('rejects non-point public key', function () {
+        const rest = Uint8Array.from(keyAggSession.rest);
+        rest.set(invalidPoint, 0);
+        expect(() => musig.addTweaks({ ...keyAggSession, rest }, tweaks)).toThrow();
+      });
+
+      it('rejects invalid second public key x', function () {
+        const rest = Uint8Array.from(keyAggSession.rest);
+        rest.set(invalidX, 65);
+        expect(() => musig.addTweaks({ ...keyAggSession, rest }, tweaks)).toThrow();
+      });
+
+      it('rejects invalid tweak', function () {
+        const rest = Uint8Array.from(keyAggSession.rest);
+        rest.set(notSecret, 98);
+        expect(() => musig.addTweaks({ ...keyAggSession, rest }, tweaks)).toThrow();
+      });
+    });
+
+    describe('signingSession', function () {
+      const { keyAggSession } = musig.keyAgg([validX]);
+      const aggNonce = new Uint8Array(66);
+      aggNonce.set(noble.getPublicKey(noble.utils.randomPrivateKey(), true), 0);
+      aggNonce.set(noble.getPublicKey(noble.utils.randomPrivateKey(), true), 33);
+      const msg = noble.utils.randomBytes();
+      const sigs = [noble.utils.randomBytes()];
+      const signingSession = musig.createSigningSession(aggNonce, msg, keyAggSession);
+
+      it('rejects wrong length', function () {
+        expect(() => musig.signAgg(sigs, new Uint8Array(160))).toThrow();
+      });
+
+      it('rejects non-point final nonce', function () {
+        const invalidSession = Uint8Array.from(signingSession);
+        invalidSession.set(invalidPoint, 0);
+        expect(() => musig.signAgg(sigs, invalidSession)).toThrow();
+      });
+
+      it('rejects invalid coefficient', function () {
+        const invalidSession = Uint8Array.from(signingSession);
+        invalidSession.set(notSecret, 65);
+        expect(() => musig.signAgg(sigs, invalidSession)).toThrow();
+      });
+
+      it('rejects invalid challenge', function () {
+        const invalidSession = Uint8Array.from(signingSession);
+        invalidSession.set(notSecret, 97);
+        expect(() => musig.signAgg(sigs, invalidSession)).toThrow();
+      });
+
+      it('rejects invalid sPart', function () {
+        const invalidSession = Uint8Array.from(signingSession);
+        invalidSession.set(notSecret, 129);
+        expect(() => musig.signAgg(sigs, invalidSession)).toThrow();
+      });
+    });
+
+    describe('keyAgg errors', function () {
+      it('rejects wrong length', function () {
+        expect(() => musig.keyAgg([new Uint8Array(31)])).toThrow();
+      });
+
+      it('rejects one wrong length', function () {
+        expect(() => musig.keyAgg([validX, new Uint8Array(31)])).toThrow();
+      });
+
+      it('rejects one invalid X', function () {
+        expect(() => musig.keyAgg([validX, invalidX])).toThrow();
+      });
+
+      it('rejects no keys', function () {
+        expect(() => musig.keyAgg([])).toThrow();
+      });
+    });
+
+    describe('addTweaks errors', function () {
+      const { keyAggSession } = musig.keyAgg([validX]);
+
+      it('rejects wrong length', function () {
+        expect(() => musig.addTweaks(keyAggSession, [validTweak], [false, true])).toThrow();
+      });
+    });
+
+    describe('nonceGen errors', function () {
+      it('rejects wrong length', function () {
+        expect(() => musig.nonceGen({ ...nonceArgs, sessionId: new Uint8Array(31) })).toThrow();
+        expect(() => musig.nonceGen({ ...nonceArgs, secretKey: new Uint8Array(31) })).toThrow();
+        expect(() => musig.nonceGen({ ...nonceArgs, msg: new Uint8Array(31) })).toThrow();
+        expect(() =>
+          musig.nonceGen({ ...nonceArgs, aggregatePublicKey: new Uint8Array(31) })
+        ).toThrow();
+        expect(() => musig.nonceGen({ ...nonceArgs, extraInput: new Uint8Array(31) })).toThrow();
+      });
+    });
+
+    describe('partialSign errors', function () {
+      it('rejects bad secretKey', function () {
+        expect(() =>
+          musig.partialSign({
+            msg: noble.utils.randomBytes(),
+            secretKey: notSecret,
+            nonce: { secretNonce: noble.utils.randomBytes(64) },
+            aggNonce: noble.utils.randomBytes(66),
+            keyAggSession: { base: new Uint8Array(32), rest: new Uint8Array(130) },
+            signingSession: new Uint8Array(161),
+          })
+        ).toThrow();
+      });
+    });
   });
+}

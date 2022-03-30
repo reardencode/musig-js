@@ -705,6 +705,7 @@ export function MuSigFactory(ecc: Crypto): MuSig {
       aggregatePublicKey?: Uint8Array;
       extraInput?: Uint8Array;
     }): { secretNonce: Uint8Array; publicNonce: Uint8Array } => {
+      if (sessionId.length !== 32) throw new Error('Expected 32-byte sessionId');
       const seed = ecc.taggedHash(
         TAGS.musig_nonce,
         ...[
