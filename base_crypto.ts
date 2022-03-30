@@ -33,7 +33,7 @@ function read32b(bytes: Uint8Array): bigint {
 }
 
 function write32b(num: bigint, dest: Uint8Array = new Uint8Array(32)): Uint8Array {
-  if (num < _0n || num > MAX_INT) throw new Error('Expected positive 32-byte number');
+  // All input values are modulo P or n, so no bounds checking needed
   const view = new DataView(dest.buffer, dest.byteOffset, dest.length);
   for (let offs = 24; offs >= 0; offs -= 8) {
     view.setBigUint64(offs, num & _64mask);
@@ -58,7 +58,7 @@ function secp256k1Right(x: bigint): bigint {
 // For prime P, the Jacobi Symbol of 'a' is 1 if and only if 'a' is a quadratic
 // residue mod P, ie. there exists a value 'x' for whom x^2 = a.
 function jacobiSymbol(a: bigint): -1 | 0 | 1 {
-  if (a === _0n) return 0;
+  if (a === _0n) return 0; // Vanishingly improbable
 
   let p = CURVE.P;
   let sign = 1;

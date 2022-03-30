@@ -145,6 +145,15 @@
             "pointX": "0000000000000000000000000000000000000000000000000000000000000000"
         },
         {
+            "hex": "a02b2026e3b9c3842684d892cd8cf3a30530c21ec6d75d1d03ed9f4f536af692",
+            "isXOnlyPoint": false,
+            "isPoint": false,
+            "pointNegate": null,
+            "hasEvenY": null,
+            "pointCompress": null,
+            "pointX": "a02b2026e3b9c3842684d892cd8cf3a30530c21ec6d75d1d03ed9f4f536af692"
+        },
+        {
             "hex": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f",
             "isXOnlyPoint": false,
             "isPoint": false,
