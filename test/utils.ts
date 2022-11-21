@@ -82,9 +82,13 @@ export const nobleCrypto = {
       return null;
     }
   },
-  pointAddTweak: (p: Uint8Array, t: Uint8Array, compress: boolean): Uint8Array | null => {
+  pointAddTweak: (p: Uint8Array, tweak: Uint8Array, compress: boolean): Uint8Array | null => {
     try {
-      return noble.utils.pointAddScalar(p, t, compress);
+      const P = noble.Point.fromHex(p);
+      const t = baseCrypto.readSecret(tweak);
+      const Q = noble.Point.BASE.multiplyAndAddUnsafe(P, t, 1n);
+      if (!Q) throw new Error('Tweaked point at infinity');
+      return Q.toRawBytes(compress);
     } catch {
       return null;
     }

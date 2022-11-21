@@ -42,7 +42,7 @@ function write32b(num: bigint, dest: Uint8Array = new Uint8Array(32)): Uint8Arra
   return dest;
 }
 
-function readSecret(bytes: Uint8Array): bigint {
+export function readSecret(bytes: Uint8Array): bigint {
   const a = read32b(bytes);
   if (a >= CURVE.n) throw new Error('Expected value mod n');
   return a;
