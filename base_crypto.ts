@@ -42,9 +42,15 @@ function write32b(num: bigint, dest: Uint8Array = new Uint8Array(32)): Uint8Arra
   return dest;
 }
 
-export function readSecret(bytes: Uint8Array): bigint {
+export function readScalar(bytes: Uint8Array): bigint {
   const a = read32b(bytes);
   if (a >= CURVE.n) throw new Error('Expected value mod n');
+  return a;
+}
+
+export function readSecret(bytes: Uint8Array): bigint {
+  const a = readScalar(bytes);
+  if (a === 0n) throw new Error('Expected non-zero');
   return a;
 }
 
@@ -112,36 +118,48 @@ export function isXOnlyPoint(p: Uint8Array): boolean {
   return jacobiSymbol(y2) === 1; // If sqrt(y^2) exists, x is on the curve.
 }
 
-export function secretAdd(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const aN = readSecret(a);
-  const bN = readSecret(b);
+export function scalarAdd(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const aN = readScalar(a);
+  const bN = readScalar(b);
   const sum = (aN + bN) % CURVE.n;
   return write32b(sum);
 }
 
-export function secretMultiply(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const aN = readSecret(a);
-  const bN = readSecret(b);
+export function scalarMultiply(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const aN = readScalar(a);
+  const bN = readScalar(b);
   const product = (aN * bN) % CURVE.n;
   return write32b(product);
 }
 
-export function secretNegate(a: Uint8Array): Uint8Array {
-  const aN = readSecret(a);
+export function scalarNegate(a: Uint8Array): Uint8Array {
+  const aN = readScalar(a);
   const negated = aN === _0n ? _0n : CURVE.n - aN;
   return write32b(negated);
 }
 
-export function secretMod(a: Uint8Array): Uint8Array {
+export function scalarMod(a: Uint8Array): Uint8Array {
   const aN = read32b(a);
   const remainder = aN % CURVE.n;
   return write32b(remainder);
 }
 
+export function isScalar(t: Uint8Array): boolean {
+  try {
+    readScalar(t);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function isSecret(s: Uint8Array): boolean {
-  if (s.length !== 32) return false;
-  const sN = read32b(s);
-  return sN < CURVE.n;
+  try {
+    readSecret(s);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function pointNegate(p: Uint8Array): Uint8Array {
@@ -177,15 +195,4 @@ export function hasEvenY(p: Uint8Array): boolean {
     return p[64] % 2 === 0;
   }
   throw new Error('Wrong length to be a point');
-}
-
-export function pointCompress(p: Uint8Array): Uint8Array {
-  // hasEvenY does basic structure check, so start there
-  const even = hasEvenY(p);
-  if (p.length === 33) return p;
-  // `from` because node.Buffer.slice doesn't copy but looks like a Uint8Array
-  const compressed = new Uint8Array(33);
-  compressed.set(p.subarray(1, 33), 1);
-  compressed[0] = even ? 2 : 3;
-  return compressed;
 }

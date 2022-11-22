@@ -24,6 +24,7 @@ export const tinyCrypto = {
     pC.set(p, 1);
     return tiny.pointCompress(pC, false);
   },
+  pointCompress: (p: Uint8Array, compress = true): Uint8Array => tiny.pointCompress(p, compress),
   getPublicKey: (s: Uint8Array, compress: boolean): Uint8Array | null => {
     try {
       return tiny.pointFromScalar(s, compress);
@@ -93,6 +94,8 @@ export const nobleCrypto = {
       return null;
     }
   },
+  pointCompress: (p: Uint8Array, compress = true): Uint8Array =>
+    noble.Point.fromHex(p).toRawBytes(compress),
   liftX: (p: Uint8Array): Uint8Array | null => {
     try {
       return noble.Point.fromHex(p).toRawBytes(false);

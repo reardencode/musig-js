@@ -89,5 +89,6 @@
     "collectCoverageFrom": [
       "*.ts"
     ]
-  }
+  },
+  "dependencies": {}
 }

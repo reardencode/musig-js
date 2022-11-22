@@ -4,15 +4,7 @@ import * as vectors from './base_vectors.json';
 describe('Base Crypto', function () {
   beforeAll(function () {});
 
-  for (const {
-    hex,
-    isXOnlyPoint,
-    isPoint,
-    pointNegate,
-    hasEvenY,
-    pointCompress,
-    pointX,
-  } of vectors.point) {
+  for (const { hex, isXOnlyPoint, isPoint, pointNegate, hasEvenY, pointX } of vectors.point) {
     const point = Buffer.from(hex, 'hex');
     it('isXOnlyPoint', function () {
       expect(base.isXOnlyPoint(point)).toBe(isXOnlyPoint);
@@ -52,13 +44,6 @@ describe('Base Crypto', function () {
         expect(base.hasEvenY(point)).toBe(hasEvenY);
       }
     });
-    it('pointCompress', function () {
-      if (pointCompress === null) {
-        expect(() => base.pointCompress(point)).toThrow();
-      } else {
-        expect(Buffer.from(base.pointCompress(point)).toString('hex')).toBe(pointCompress);
-      }
-    });
     it('pointX', function () {
       if (pointX === null) {
         expect(() => base.pointX(point)).toThrow();
@@ -68,38 +53,39 @@ describe('Base Crypto', function () {
     });
   }
 
-  for (const { hex, isSecret, bHex, sum, product, negated, remainder } of vectors.secret) {
+  // TODO: Add tests for isSecret
+  for (const { hex, isScalar, bHex, sum, product, negated, remainder } of vectors.secret) {
     const secret = Buffer.from(hex, 'hex');
     const b = Buffer.from(bHex, 'hex');
-    it('isSecret', function () {
-      expect(base.isSecret(secret)).toBe(isSecret);
+    it('isScalar', function () {
+      expect(base.isScalar(secret)).toBe(isScalar);
     });
-    it('secretAdd', function () {
+    it('scalarAdd', function () {
       if (sum === null) {
-        expect(() => base.secretAdd(secret, b)).toThrow();
+        expect(() => base.scalarAdd(secret, b)).toThrow();
       } else {
-        expect(Buffer.from(base.secretAdd(secret, b)).toString('hex')).toBe(sum);
+        expect(Buffer.from(base.scalarAdd(secret, b)).toString('hex')).toBe(sum);
       }
     });
-    it('secretMultiply', function () {
+    it('scalarMultiply', function () {
       if (sum === null) {
-        expect(() => base.secretMultiply(secret, b)).toThrow();
+        expect(() => base.scalarMultiply(secret, b)).toThrow();
       } else {
-        expect(Buffer.from(base.secretMultiply(secret, b)).toString('hex')).toBe(product);
+        expect(Buffer.from(base.scalarMultiply(secret, b)).toString('hex')).toBe(product);
       }
     });
-    it('secretNegate', function () {
+    it('scalarNegate', function () {
       if (negated === null) {
-        expect(() => base.secretNegate(secret)).toThrow();
+        expect(() => base.scalarNegate(secret)).toThrow();
       } else {
-        expect(Buffer.from(base.secretNegate(secret)).toString('hex')).toBe(negated);
+        expect(Buffer.from(base.scalarNegate(secret)).toString('hex')).toBe(negated);
       }
     });
-    it('secretMod', function () {
+    it('scalarMod', function () {
       if (remainder === null) {
-        expect(() => base.secretMod(secret)).toThrow();
+        expect(() => base.scalarMod(secret)).toThrow();
       } else {
-        expect(Buffer.from(base.secretMod(secret)).toString('hex')).toBe(remainder);
+        expect(Buffer.from(base.scalarMod(secret)).toString('hex')).toBe(remainder);
       }
     });
   }
