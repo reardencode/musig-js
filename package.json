@@ -1,5 +1,5 @@
 {
-  "name": "musig",
+  "name": "@brandonblack/musig",
   "version": "0.0.1-alpha.0",
   "description": "JS implementation of MuSig. 1-dependency MuSig key aggregation, tweaking, and signing.",
   "files": [
