@@ -1,6 +1,6 @@
 {
   "name": "@brandonblack/musig",
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.1-alpha.1",
   "description": "JS implementation of MuSig. 1-dependency MuSig key aggregation, tweaking, and signing.",
   "files": [
     "lib"
