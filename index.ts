@@ -869,10 +869,10 @@ export function MuSigFactory(ecc: Crypto): MuSig {
   ] as const;
   const otherArgs = ['aggPublicKey', 'secretNonce'] as const;
   type ArgName =
-    | typeof pubKeyArgs[number]
-    | typeof args32b[number]
-    | typeof pubNonceArgs[number]
-    | typeof otherArgs[number];
+    | (typeof pubKeyArgs)[number]
+    | (typeof args32b)[number]
+    | (typeof pubNonceArgs)[number]
+    | (typeof otherArgs)[number];
   type Args = { [A in ArgName]?: Uint8Array | Uint8Array[] };
 
   const argLengths = new Map<string, number>();

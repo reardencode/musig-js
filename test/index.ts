@@ -1,4 +1,7 @@
-import * as noble from '@noble/secp256k1';
+import * as nc from 'node:crypto';
+import { secp256k1, schnorr } from '@noble/curves/secp256k1';
+import { hashToPrivateScalar } from '@noble/curves/abstract/modular';
+import { numberToBytesBE } from '@noble/curves/abstract/utils';
 import { KeyGenContext, MuSigFactory, SessionKey } from '../index';
 import { nobleCrypto, tinyCrypto } from './utils';
 import * as det_sign_vectors from './bip-vectors/det_sign_vectors.json';
@@ -16,8 +19,18 @@ interface Signer {
   publicNonce?: Uint8Array;
   sig?: Uint8Array;
 }
+function randomBytes(n = 32): Uint8Array {
+  const ret = new Uint8Array(n);
+  nc.randomFillSync(ret);
+  return ret;
+}
+function randomPrivateKey(): Uint8Array {
+  const rand = randomBytes(secp256k1.CURVE.Fp.BYTES + 8);
+  const d = hashToPrivateScalar(rand, secp256k1.CURVE.n);
+  return numberToBytesBE(d, secp256k1.CURVE.Fp.BYTES);
+}
 
-const validPub = noble.getPublicKey(noble.utils.randomPrivateKey(), true);
+const validPub = secp256k1.getPublicKey(randomPrivateKey(), true);
 const invalidPub = Buffer.from(
   '02a02b2026e3b9c3842684d892cd8cf3a30530c21ec6d75d1d03ed9f4f536af692',
   'hex'
@@ -30,7 +43,7 @@ const notSecret = Buffer.from(
   'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
   'hex'
 );
-const validTweak = noble.utils.randomPrivateKey();
+const validTweak = randomPrivateKey();
 
 const nonceArgs = {
   sessionId: Buffer.from(nonce_gen_vectors.test_cases[0].rand_, 'hex'),
@@ -42,7 +55,7 @@ const nonceArgs = {
 };
 
 const tweaks = new Array(5).fill(0).map((_, i) => {
-  const tweak = noble.utils.randomPrivateKey();
+  const tweak = randomPrivateKey();
   return { tweak, xOnly: (tweak[i] & 1) === 1 };
 });
 const cryptos = [
@@ -58,15 +71,15 @@ for (const { cryptoName, crypto } of cryptos) {
       describe(`random musig(${nSigners})`, function () {
         let keyGenContext: KeyGenContext;
         let signers: Signer[] = [];
-        let msg = noble.utils.randomBytes();
+        let msg = randomBytes();
         let aggNonce: Uint8Array;
         let sessionKey: SessionKey;
         let sig: Uint8Array;
 
         beforeAll(function () {
           for (let i = 0; i < nSigners; i++) {
-            const secretKey = noble.utils.randomPrivateKey();
-            const publicKey = noble.getPublicKey(secretKey, true);
+            const secretKey = randomPrivateKey();
+            const publicKey = secp256k1.getPublicKey(secretKey, true);
             signers.push({ secretKey, publicKey });
           }
         });
@@ -101,7 +114,7 @@ for (const { cryptoName, crypto } of cryptos) {
                     break;
                   case 2:
                     signer.publicNonce = musig.nonceGen({
-                      sessionId: noble.utils.randomBytes(),
+                      sessionId: randomBytes(),
                       secretKey: signer.secretKey,
                       publicKey: signer.publicKey,
                       msg,
@@ -110,12 +123,12 @@ for (const { cryptoName, crypto } of cryptos) {
                     break;
                   case 3:
                     signer.publicNonce = musig.nonceGen({
-                      sessionId: noble.utils.randomBytes(),
+                      sessionId: randomBytes(),
                       secretKey: signer.secretKey,
                       publicKey: signer.publicKey,
                       msg,
                       xOnlyPublicKey: publicKey,
-                      extraInput: noble.utils.randomBytes(),
+                      extraInput: randomBytes(),
                     });
                     break;
                   default:
@@ -173,7 +186,7 @@ for (const { cryptoName, crypto } of cryptos) {
 
             it('verifies sig', function () {
               const publicKey = musig.getXOnlyPubkey(keyGenContext);
-              expect(noble.schnorr.verifySync(sig, msg, publicKey)).toBe(true);
+              expect(schnorr.verify(sig, msg, publicKey)).toBe(true);
             });
           });
         }
@@ -297,7 +310,7 @@ for (const { cryptoName, crypto } of cryptos) {
               Buffer.from(expected.substring(64, 128), 'hex'),
             ];
             const expectedNonce = Buffer.concat(
-              secretNonces.map((s) => Buffer.from(noble.getPublicKey(s, true)))
+              secretNonces.map((s) => Buffer.from(secp256k1.getPublicKey(s, true)))
             );
             expect(Buffer.from(publicNonce).toString('hex')).toBe(expectedNonce.toString('hex'));
           });
@@ -335,7 +348,7 @@ for (const { cryptoName, crypto } of cryptos) {
       } = sign_verify_vectors;
 
       it('checks public key', function () {
-        const publicKey = noble.getPublicKey(sk, true);
+        const publicKey = secp256k1.getPublicKey(sk, true);
         expect(Buffer.from(publicKey).toString('hex')).toEqual(pubkeys[0].toLowerCase());
       });
 
@@ -401,7 +414,7 @@ for (const { cryptoName, crypto } of cryptos) {
       let publicKey: Uint8Array;
 
       it('checks public key', function () {
-        publicKey = noble.getPublicKey(secretKey, true);
+        publicKey = secp256k1.getPublicKey(secretKey, true);
         expect(Buffer.from(publicKey).toString('hex')).toEqual(pubkeys[0].toLowerCase());
       });
 
@@ -507,7 +520,7 @@ for (const { cryptoName, crypto } of cryptos) {
 
             const aggPk = musig.getXOnlyPubkey(sessionKey);
             // Something in signAgg, nonce processing, or maybe key aggregation broken
-            expect(noble.schnorr.verifySync(sig, message, aggPk)).toBe(true);
+            expect(schnorr.verify(sig, message, aggPk)).toBe(true);
           });
         }
       );
@@ -515,7 +528,7 @@ for (const { cryptoName, crypto } of cryptos) {
 
     //    describe('keyGenContext', function () {
     //      const keyGenContext = musig.keyAgg([
-    //        noble.getPublicKey(noble.utils.randomPrivateKey(), true),
+    //        secp256k1.getPublicKey(randomPrivateKey(), true),
     //      ]);
     //      const tweaks = [validTweak];
     //
@@ -551,10 +564,10 @@ for (const { cryptoName, crypto } of cryptos) {
     //    describe('signingSession', function () {
     //      const keyGenContext = musig.keyAgg([validPub]);
     //      const aggNonce = new Uint8Array(66);
-    //      aggNonce.set(noble.getPublicKey(noble.utils.randomPrivateKey(), true), 0);
-    //      aggNonce.set(noble.getPublicKey(noble.utils.randomPrivateKey(), true), 33);
-    //      const msg = noble.utils.randomBytes();
-    //      const sigs = [noble.utils.randomBytes()];
+    //      aggNonce.set(secp256k1.getPublicKey(randomPrivateKey(), true), 0);
+    //      aggNonce.set(secp256k1.getPublicKey(randomPrivateKey(), true), 33);
+    //      const msg = randomBytes();
+    //      const sigs = [randomBytes()];
     //      const signingSession = musig.createSigningSession(aggNonce, msg, keyGenContext);
     //
     //      it('rejects wrong length', function () {
@@ -629,13 +642,13 @@ for (const { cryptoName, crypto } of cryptos) {
 
     describe('partialSign errors', function () {
       const aggNonce = new Uint8Array(66);
-      aggNonce.set(noble.getPublicKey(noble.utils.randomPrivateKey(), true), 0);
-      aggNonce.set(noble.getPublicKey(noble.utils.randomPrivateKey(), true), 33);
-      const sessionKey = musig.startSigningSession(aggNonce, noble.utils.randomBytes(), [validPub]);
+      aggNonce.set(secp256k1.getPublicKey(randomPrivateKey(), true), 0);
+      aggNonce.set(secp256k1.getPublicKey(randomPrivateKey(), true), 33);
+      const sessionKey = musig.startSigningSession(aggNonce, randomBytes(), [validPub]);
       const secretNonce = new Uint8Array(97);
       const fakePublicNonce = new Uint8Array(66);
-      secretNonce.set(noble.utils.randomPrivateKey(), 0);
-      secretNonce.set(noble.utils.randomPrivateKey(), 32);
+      secretNonce.set(randomPrivateKey(), 0);
+      secretNonce.set(randomPrivateKey(), 32);
       secretNonce.set(validPub, 64);
 
       for (const badNonceI of [0, 1]) {
@@ -646,7 +659,7 @@ for (const { cryptoName, crypto } of cryptos) {
           expect(() => {
             musig.addExternalNonce(fakePublicNonce, invalidSecretNonce);
             musig.partialSign({
-              secretKey: noble.utils.randomPrivateKey(),
+              secretKey: randomPrivateKey(),
               publicNonce: fakePublicNonce,
               sessionKey,
             });

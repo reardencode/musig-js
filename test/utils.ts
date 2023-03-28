@@ -1,5 +1,5 @@
-import createHash = require('create-hash');
-import * as noble from '@noble/secp256k1';
+import { sha256 } from '@noble/hashes/sha256';
+import { secp256k1, schnorr } from '@noble/curves/secp256k1';
 import * as tiny from 'tiny-secp256k1';
 import * as baseCrypto from '../base_crypto';
 
@@ -32,22 +32,20 @@ export const tinyCrypto = {
       return null;
     }
   },
-  taggedHash: noble.utils.taggedHashSync,
+  taggedHash: schnorr.utils.taggedHash,
   sha256: (...messages: Uint8Array[]): Uint8Array => {
-    const sha256 = createHash('sha256');
-    for (const message of messages) sha256.update(message);
-    return sha256.digest();
+    const h = sha256.create();
+    for (const message of messages) h.update(message);
+    return h.digest();
   },
 };
-
-noble.utils.sha256Sync = tinyCrypto.sha256;
 
 export const nobleCrypto = {
   ...baseCrypto,
   pointMultiplyUnsafe: (p: Uint8Array, a: Uint8Array, compress: boolean): Uint8Array | null => {
     try {
-      const product = noble.Point.fromHex(p).multiplyAndAddUnsafe(
-        noble.Point.ZERO,
+      const product = secp256k1.ProjectivePoint.fromHex(p).multiplyAndAddUnsafe(
+        secp256k1.ProjectivePoint.ZERO,
         BigInt(`0x${Buffer.from(a).toString('hex')}`),
         BigInt(1)
       );
@@ -64,8 +62,8 @@ export const nobleCrypto = {
     compress: boolean
   ): Uint8Array | null => {
     try {
-      const p2p = noble.Point.fromHex(p2);
-      const p = noble.Point.fromHex(p1).multiplyAndAddUnsafe(
+      const p2p = secp256k1.ProjectivePoint.fromHex(p2);
+      const p = secp256k1.ProjectivePoint.fromHex(p1).multiplyAndAddUnsafe(
         p2p,
         BigInt(`0x${Buffer.from(a).toString('hex')}`),
         BigInt(1)
@@ -78,16 +76,18 @@ export const nobleCrypto = {
   },
   pointAdd: (a: Uint8Array, b: Uint8Array, compress: boolean): Uint8Array | null => {
     try {
-      return noble.Point.fromHex(a).add(noble.Point.fromHex(b)).toRawBytes(compress);
+      return secp256k1.ProjectivePoint.fromHex(a)
+        .add(secp256k1.ProjectivePoint.fromHex(b))
+        .toRawBytes(compress);
     } catch {
       return null;
     }
   },
   pointAddTweak: (p: Uint8Array, tweak: Uint8Array, compress: boolean): Uint8Array | null => {
     try {
-      const P = noble.Point.fromHex(p);
+      const P = secp256k1.ProjectivePoint.fromHex(p);
       const t = baseCrypto.readSecret(tweak);
-      const Q = noble.Point.BASE.multiplyAndAddUnsafe(P, t, 1n);
+      const Q = secp256k1.ProjectivePoint.BASE.multiplyAndAddUnsafe(P, t, 1n);
       if (!Q) throw new Error('Tweaked point at infinity');
       return Q.toRawBytes(compress);
     } catch {
@@ -95,21 +95,21 @@ export const nobleCrypto = {
     }
   },
   pointCompress: (p: Uint8Array, compress = true): Uint8Array =>
-    noble.Point.fromHex(p).toRawBytes(compress),
+    secp256k1.ProjectivePoint.fromHex(p).toRawBytes(compress),
   liftX: (p: Uint8Array): Uint8Array | null => {
     try {
-      return noble.Point.fromHex(p).toRawBytes(false);
+      return secp256k1.ProjectivePoint.fromHex(p).toRawBytes(false);
     } catch {
       return null;
     }
   },
   getPublicKey: (s: Uint8Array, compress: boolean): Uint8Array | null => {
     try {
-      return noble.getPublicKey(s, compress);
+      return secp256k1.getPublicKey(s, compress);
     } catch {
       return null;
     }
   },
-  taggedHash: noble.utils.taggedHashSync,
+  taggedHash: schnorr.utils.taggedHash,
   sha256: tinyCrypto.sha256,
 };

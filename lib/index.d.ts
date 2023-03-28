@@ -75,7 +75,7 @@ export interface Crypto {
     taggedHash(tag: string, ...messages: Uint8Array[]): Uint8Array;
     sha256(...messages: Uint8Array[]): Uint8Array;
 }
-export declare type Tweak = TypedTweak | Uint8Array;
+export type Tweak = TypedTweak | Uint8Array;
 export interface TypedTweak {
     tweak: Uint8Array;
     xOnly?: boolean;
