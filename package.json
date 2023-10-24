@@ -79,6 +79,10 @@
     "./base_crypto": {
       "import": "./lib/esm/base_crypto.js",
       "default": "./lib/base_crypto.js"
+    },
+    "./lib/base_crypto": {
+      "import": "./lib/esm/base_crypto.js",
+      "default": "./lib/base_crypto.js"
     }
   },
   "jest": {
